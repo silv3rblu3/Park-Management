@@ -3,6 +3,8 @@
 document.addEventListener('DOMContentLoaded', () => { CoreSystem.init(); });
 
 const CoreSystem = {
+    activeApp: 'home',
+
     init: function() {
         this.bindGlobalEvents();
         this.applySavedTheme();
@@ -10,6 +12,7 @@ const CoreSystem = {
     },
 
     bindGlobalEvents: function() {
+        // 1. Bento Menu Toggle
         const bentoTrigger = document.getElementById('bento-trigger');
         const bentoMenu = document.getElementById('bento-menu');
         
@@ -25,7 +28,21 @@ const CoreSystem = {
             });
         });
 
-        // Settings Modal & Theme Editor
+        // 2. Universal Global Search
+        const searchInput = document.getElementById('global-search');
+        searchInput.addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            
+            // This grabs any table row or searchable card currently rendered in the main stage
+            const searchableElements = document.querySelectorAll('#app-container table tbody tr, #app-container .searchable-card');
+            
+            searchableElements.forEach(el => {
+                const text = el.innerText.toLowerCase();
+                el.style.display = text.includes(term) ? '' : 'none';
+            });
+        });
+
+        // 3. Settings Modal & Theme Editor
         const settingsModal = document.getElementById('settings-modal');
         document.getElementById('global-settings-trigger').addEventListener('click', () => { this.populateThemeEditor(); settingsModal.showModal(); });
         document.getElementById('close-settings-btn').addEventListener('click', () => settingsModal.close());
@@ -35,7 +52,6 @@ const CoreSystem = {
         document.getElementById('new-theme-btn').addEventListener('click', () => {
             document.getElementById('theme-edit-id').value = 'theme_' + Date.now();
             document.getElementById('theme-edit-name').value = '';
-            // Reset to defaults
             ['bg', 'surface', 'text-main', 'text-muted', 'accent', 'accent-hover', 'border', 'danger'].forEach(id => document.getElementById(`theme-edit-${id}`).value = '#000000');
         });
 
@@ -89,7 +105,7 @@ const CoreSystem = {
             NotificationSystem.show("Theme Deleted", "success");
         });
 
-        // Global Data Export/Import
+        // 4. Global Data Export/Import
         document.getElementById('global-export-btn').addEventListener('click', () => StateManager.exportGlobalData());
         const importInput = document.getElementById('global-import-file');
         document.getElementById('global-import-btn').addEventListener('click', () => importInput.click());
@@ -142,15 +158,107 @@ const CoreSystem = {
         root.style.setProperty('--danger-color', theme.colors.danger);
     },
 
+    generateHomeDashboard: function() {
+        const state = StateManager.loadGlobalState();
+        
+        // 1. Calculate Inventory Glance
+        let lowInvCount = 0;
+        if (state.apps.inventory && state.apps.inventory.items) {
+            state.apps.inventory.items.forEach(item => {
+                let qty = 0;
+                (state.apps.inventory.transactions || []).filter(t => t.sku === item.sku).forEach(t => {
+                    if(t.type === 'Stock In') qty += Number(t.quantity);
+                    else if(t.type === 'Stock Out') qty -= Number(t.quantity);
+                    else if(t.type === 'Audit Correction') qty = Number(t.quantity);
+                });
+                if(qty <= item.reorderLevel) lowInvCount++;
+            });
+        }
+
+        // 2. Calculate Fleet Glance
+        let fleetIssues = 0;
+        let totalVehicles = state.apps.fleet?.vehicles?.length || 0;
+        if (state.apps.fleet && state.apps.fleet.inspections) {
+            // Count vehicles with failed inspections that aren't fixed
+            state.apps.fleet.vehicles.forEach(v => {
+                const vInsp = state.apps.fleet.inspections.filter(i => i.vehicleId === v.id).sort((a,b) => new Date(b.date) - new Date(a.date));
+                if(vInsp.length > 0 && vInsp[0].needsWork) fleetIssues++;
+            });
+        }
+
+        // 3. Calculate First Aid Glance
+        let firstAidKits = state.apps.firstAid?.categories?.length || 0;
+
+        return `
+            <div style="padding: 2rem;">
+                <h1 style="margin-bottom: 20px;">System Overview</h1>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+                    
+                    <div class="app-card searchable-card" style="cursor: pointer; border-top: 4px solid var(--accent-primary); transition: transform 0.2s;" onclick="CoreSystem.routeToApp('inventory')" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform='translateY(0)'">
+                        <h3 style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;"><span style="font-size: 1.5rem;">📦</span> Inventory</h3>
+                        ${lowInvCount > 0 
+                            ? `<p><strong style="color: var(--danger-color); font-size: 1.2rem;">${lowInvCount}</strong> items at or below reorder level.</p>`
+                            : `<p style="color: var(--text-secondary);">All stock levels are optimal.</p>`}
+                    </div>
+
+                    <div class="app-card searchable-card" style="cursor: pointer; border-top: 4px solid var(--accent-primary); transition: transform 0.2s;" onclick="CoreSystem.routeToApp('fleet')" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform='translateY(0)'">
+                        <h3 style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;"><span style="font-size: 1.5rem;">🛻</span> Fleet Status</h3>
+                        <p style="margin-bottom: 5px;"><strong>${totalVehicles}</strong> Registered Vehicles</p>
+                        ${fleetIssues > 0 
+                            ? `<p><strong style="color: var(--danger-color);">${fleetIssues}</strong> vehicle(s) currently need repair or service.</p>`
+                            : `<p style="color: var(--text-secondary);">All vehicles fully operational.</p>`}
+                    </div>
+
+                    <div class="app-card searchable-card" style="cursor: pointer; border-top: 4px solid var(--accent-primary); transition: transform 0.2s;" onclick="CoreSystem.routeToApp('winterization')" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform='translateY(0)'">
+                        <h3 style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;"><span style="font-size: 1.5rem;">❄️</span> Winter Ops</h3>
+                        <p style="color: var(--text-secondary);">Manage seasonal facility transitions and generate checklist reports.</p>
+                    </div>
+
+                    <div class="app-card searchable-card" style="cursor: pointer; border-top: 4px solid var(--accent-primary); transition: transform 0.2s;" onclick="CoreSystem.routeToApp('firstAid')" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform='translateY(0)'">
+                        <h3 style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;"><span style="font-size: 1.5rem;">🩹</span> First Aid</h3>
+                        <p><strong>${firstAidKits}</strong> Configured Areas/Kits</p>
+                        <p style="color: var(--text-secondary);">Click to calculate required supplies or generate reorder lists.</p>
+                    </div>
+
+                </div>
+            </div>
+        `;
+    },
+
     routeToApp: function(appName) {
+        this.activeApp = appName;
         const container = document.getElementById('app-container');
         const titleLabel = document.getElementById('app-title');
+        
+        // Clear global search bar on app switch
+        document.getElementById('global-search').value = '';
+
         container.innerHTML = '';
 
         switch(appName) {
-            case 'home': titleLabel.innerText = "Home Dashboard"; container.innerHTML = `<div class="home-wrapper" style="padding: 2rem; text-align: center;"><h1>Welcome to the Hub</h1><p style="color: var(--text-secondary); margin-top: 10px;">Select an app from the grid menu to begin.</p></div>`; break;
-            case 'fleet': titleLabel.innerText = "Fleet Management"; if (typeof renderFleetApp === 'function') { container.innerHTML = renderFleetApp(); if (typeof initFleetLogic === 'function') initFleetLogic(); } else { container.innerHTML = `<p>Error: Fleet modules not loaded.</p>`; } break;
-            // Add Inventory, Winterization, First Aid back here
+            case 'home': 
+                titleLabel.innerText = "Home Dashboard"; 
+                container.innerHTML = this.generateHomeDashboard(); 
+                break;
+            case 'inventory': 
+                titleLabel.innerText = "Inventory Manager"; 
+                if (typeof renderInventoryApp === 'function') { container.innerHTML = renderInventoryApp(); if (typeof initInventoryLogic === 'function') initInventoryLogic(); } else { container.innerHTML = `<p>Error: Inventory modules not loaded.</p>`; } 
+                break;
+            case 'fleet': 
+                titleLabel.innerText = "Fleet Management"; 
+                if (typeof renderFleetApp === 'function') { container.innerHTML = renderFleetApp(); if (typeof initFleetLogic === 'function') initFleetLogic(); } else { container.innerHTML = `<p>Error: Fleet modules not loaded.</p>`; } 
+                break;
+            case 'winterization': 
+                titleLabel.innerText = "Winter Ops Tracker"; 
+                if (typeof renderWinterizationApp === 'function') { container.innerHTML = renderWinterizationApp(); if (typeof initWinterizationLogic === 'function') initWinterizationLogic(); } else { container.innerHTML = `<p>Error: Winterization modules not loaded.</p>`; } 
+                break;
+            case 'firstAid': 
+                titleLabel.innerText = "First Aid Tracker"; 
+                if (typeof renderFirstAidApp === 'function') { container.innerHTML = renderFirstAidApp(); if (typeof initFirstAidLogic === 'function') initFirstAidLogic(); } else { container.innerHTML = `<p>Error: First Aid modules not loaded.</p>`; } 
+                break;
+            default:
+                console.warn("Unknown route: " + appName);
+                break;
         }
     }
 };
