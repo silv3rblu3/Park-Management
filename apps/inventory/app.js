@@ -2,33 +2,54 @@
 
 function initInventoryLogic() {
     let invData = StateManager.getAppData('inventory');
-    
-    // Initialize defaults if empty
     if (!invData.items) {
         invData = { items: [], transactions: [] };
         StateManager.setAppData('inventory', invData);
     }
+    const safeSave = () => { StateManager.setAppData('inventory', invData); };
 
-    const safeSave = () => {
-        StateManager.setAppData('inventory', invData);
-    };
-
-    // --- Core Logic Helpers (From your logic.js) ---
+    // --- Core Logic (from your logic.js) ---
     const getCurrentQty = (sku) => {
         let qty = 0;
         const itemTrans = invData.transactions.filter(t => t.sku === sku);
-        
         itemTrans.forEach(t => {
             if (t.type === 'Stock In') qty += parseFloat(t.quantity);
             else if (t.type === 'Stock Out') qty -= parseFloat(t.quantity);
-            else if (t.type === 'Audit Correction') qty = parseFloat(t.quantity); 
+            else if (t.type === 'Audit Correction') qty = parseFloat(t.quantity); // Overrides math to match count
         });
         return qty;
     };
 
-    // --- UI Routing (Tabs) ---
+    const getReorderList = () => {
+        let reorderList = [];
+        invData.items.forEach(item => {
+            const currentQty = getCurrentQty(item.sku);
+            if (currentQty <= item.reorderLevel) {
+                let orderAmount = item.targetQty - currentQty;
+                if (orderAmount < 0) orderAmount = 0;
+                reorderList.push({ sku: item.sku, itemName: item.name, currentQty: currentQty, qtyToOrder: orderAmount });
+            }
+        });
+        return reorderList;
+    };
+
+    const addTransaction = (type, sku, quantity, notes) => {
+        const item = invData.items.find(i => i.sku === sku);
+        if (!item) return false;
+        invData.transactions.push({
+            id: crypto.randomUUID(),
+            date: new Date().toISOString(),
+            sku: sku, type: type,
+            quantity: parseFloat(quantity),
+            actualUnitCost: item.unitCost || 0,
+            notes: notes || ''
+        });
+        safeSave(); return true;
+    };
+
+    // --- Tab Routing ---
     const tabs = document.querySelectorAll('.inv-tab');
-    const stage = document.getElementById('inv-main-stage');
+    const stage = document.getElementById('inv-stage');
 
     tabs.forEach(tab => {
         tab.addEventListener('click', (e) => {
@@ -38,358 +59,260 @@ function initInventoryLogic() {
         });
     });
 
+    // Scanner instance placeholder
+    let html5QrcodeScanner = null;
+
     function renderInvView(viewName) {
         stage.innerHTML = '';
         
-        if (viewName === 'inv-view-dashboard') {
+        // Clean up scanner if we leave the audit tab
+        if (viewName !== 'audit' && html5QrcodeScanner) {
+            html5QrcodeScanner.clear().catch(err => console.error("Scanner clear failed", err));
+            html5QrcodeScanner = null;
+        }
+
+        if (viewName === 'dashboard') {
             let html = `
+            <div class="app-card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
-                    <h3>Master Dashboard</h3>
-                    <input type="text" id="inv-local-search" class="app-input" placeholder="Search SKU or Name..." style="max-width: 300px; margin-bottom: 0;">
+                    <h3 style="margin: 0;">Main Dashboard</h3>
+                    <input type="text" id="inv-search" class="app-input" placeholder="Search SKU or Name..." style="max-width: 300px; margin: 0;">
                 </div>
                 <div class="app-table-container">
                     <table class="app-table">
-                        <thead>
-                            <tr>
-                                <th>SKU</th>
-                                <th>Item Name</th>
-                                <th>Category</th>
-                                <th>Location</th>
-                                <th>Current Qty</th>
-                                <th>Target</th>
-                            </tr>
-                        </thead>
-                        <tbody id="inv-dashboard-body">`;
+                        <thead><tr><th>SKU</th><th>Item Name</th><th>Category</th><th>Location</th><th>Qty on Hand</th><th>Reorder Level</th><th>Target Qty</th></tr></thead>
+                        <tbody id="inv-dash-body">`;
             
-            if (invData.items.length === 0) {
-                html += `<tr><td colspan=\"6\" style=\"text-align:center;\">No items found. Import a CSV or add manually.</td></tr>`;
-            } else {
+            if (invData.items.length === 0) { html += `<tr><td colspan="7" style="text-align:center;">No items found. Import a CSV or add manually.</td></tr>`; } 
+            else {
                 invData.items.forEach(item => {
                     const qty = getCurrentQty(item.sku);
-                    let rowStyle = '';
-                    if (qty <= 0) rowStyle = 'background-color: rgba(231, 76, 60, 0.1);';
-                    else if (qty <= item.reorderLevel) rowStyle = 'background-color: rgba(243, 156, 18, 0.1);';
+                    let rowClass = '';
+                    if (qty <= 0) rowClass = 'inv-row-danger';
+                    else if (qty <= item.reorderLevel) rowClass = 'inv-row-warning';
 
-                    html += `<tr style="${rowStyle}">
-                                <td><strong>${item.sku}</strong></td>
-                                <td>${item.name}</td>
-                                <td>${item.category}</td>
-                                <td>${item.location || 'N/A'}</td>
-                                <td style=\"font-size: 1.1rem; font-weight: bold;\">${qty}</td>
-                                <td>${item.targetQty}</td>
+                    html += `<tr class="${rowClass}">
+                                <td><strong>${item.sku}</strong></td><td>${item.name}</td><td>${item.category || ''}</td><td>${item.location || ''}</td>
+                                <td style="font-size: 1.1rem; font-weight: bold;">${qty}</td><td>${item.reorderLevel}</td><td>${item.targetQty}</td>
                              </tr>`;
                 });
             }
-            html += `</tbody></table></div>`;
+            html += `</tbody></table></div></div>`;
             stage.innerHTML = html;
 
-            // Bind Local Search
-            document.getElementById('inv-local-search').addEventListener('input', (e) => {
+            document.getElementById('inv-search').addEventListener('input', (e) => {
                 const term = e.target.value.toLowerCase();
-                const rows = document.querySelectorAll('#inv-dashboard-body tr');
-                rows.forEach(row => {
-                    const text = row.innerText.toLowerCase();
-                    row.style.display = text.includes(term) ? '' : 'none';
-                });
+                const rows = document.querySelectorAll('#inv-dash-body tr');
+                rows.forEach(row => { row.style.display = row.innerText.toLowerCase().includes(term) ? '' : 'none'; });
             });
         } 
-        else if (viewName === 'inv-view-transactions') {
-            let html = `<h3>Recent Transactions</h3>
-                        <div class="app-table-container" style="margin-top: 15px;">
-                            <table class="app-table">
-                                <thead>
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Type</th>
-                                        <th>SKU</th>
-                                        <th>Quantity</th>
-                                    </tr>
-                                </thead>
-                                <tbody>`;
-            
+        else if (viewName === 'transactions') {
+            let html = `
+            <div class="inv-split-layout">
+                <div class="app-card">
+                    <h3 style="margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Log New Transaction</h3>
+                    <form id="inv-trans-form">
+                        <div style="display: flex; gap: 15px; margin-bottom: 15px; font-weight: bold;">
+                            <label><input type="radio" name="t-type" value="Stock In" checked> Stock In (+)</label>
+                            <label><input type="radio" name="t-type" value="Stock Out"> Stock Out (-)</label>
+                        </div>
+                        <label>Item (SKU)</label>
+                        <select id="t-sku" class="app-select" required><option value="">Select an Item...</option>
+                            ${invData.items.map(i => `<option value="${i.sku}">[${i.sku}] ${i.name}</option>`).join('')}
+                        </select>
+                        <label>Quantity</label><input type="number" id="t-qty" class="app-input" min="1" required>
+                        <label>Notes</label><textarea id="t-notes" class="app-input" rows="2"></textarea>
+                        <button type="submit" class="btn-primary" style="width: 100%;">Submit Transaction</button>
+                    </form>
+                </div>
+                <div class="app-card">
+                    <h3 style="margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Recent Transactions</h3>
+                    <div class="app-table-container" style="max-height: 400px; overflow-y: auto;">
+                        <table class="app-table">
+                            <thead><tr><th>Date</th><th>Type</th><th>Item</th><th>Qty</th></tr></thead>
+                            <tbody>`;
             const recent = [...invData.transactions].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 50);
-            if (recent.length === 0) {
-                html += `<tr><td colspan=\"4\" style=\"text-align:center;\">No recent transactions.</td></tr>`;
-            } else {
+            if (recent.length === 0) { html += `<tr><td colspan="4" style="text-align:center;">No recent transactions.</td></tr>`; } 
+            else {
                 recent.forEach(t => {
-                    html += `<tr>
-                                <td>${new Date(t.date).toLocaleDateString()} ${new Date(t.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
-                                <td>${t.type}</td>
-                                <td><strong>${t.sku}</strong></td>
-                                <td>${t.quantity}</td>
-                             </tr>`;
+                    const iName = invData.items.find(i => i.sku === t.sku)?.name || 'Unknown';
+                    html += `<tr><td>${new Date(t.date).toLocaleString([], {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}</td>
+                             <td>${t.type}</td><td>${iName}</td><td>${t.type === 'Audit Correction' ? '' : (t.type === 'Stock In' ? '+' : '-')}${t.quantity}</td></tr>`;
                 });
             }
-            html += `</tbody></table></div>`;
+            html += `</tbody></table></div></div></div>`;
             stage.innerHTML = html;
+
+            document.getElementById('inv-trans-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const type = document.querySelector('input[name="t-type"]:checked').value;
+                if (addTransaction(type, document.getElementById('t-sku').value, document.getElementById('t-qty').value, document.getElementById('t-notes').value)) {
+                    NotificationSystem.show('Transaction Saved', 'success'); renderInvView('transactions');
+                }
+            });
         }
-        else if (viewName === 'inv-view-reports') {
-            let html = `<div style="display: flex; justify-content: space-between; align-items: center;">
-                            <h3>Reorder List</h3>
-                            <button id="print-reorder-btn" class="btn-outline">🖨️ Print List</button>
+        else if (viewName === 'audit') {
+            stage.innerHTML = `
+            <div class="app-card" style="text-align: center; max-width: 600px; margin: 0 auto;">
+                <h3 style="margin-bottom: 15px;">Inventory Audit Scanner</h3>
+                <input type="text" id="audit-manual-sku" class="app-input" placeholder="Type SKU manually and hit Enter..." style="font-size: 1.2rem; text-align: center; margin-bottom: 20px;">
+                <div id="reader" style="width: 100%; margin: 0 auto 20px auto;"></div>
+                <button id="start-scanner" class="btn-outline" style="width: 100%; margin-bottom: 20px;">📷 Start Camera Scanner</button>
+                
+                <div id="audit-form-area" class="hidden" style="background: rgba(0,0,0,0.03); padding: 20px; border-radius: var(--radius-md); border: 1px solid var(--accent-primary);">
+                    <h2 id="audit-item-name" style="color: var(--accent-primary); margin-bottom: 10px;">Item Name</h2>
+                    <p style="font-size: 1.1rem; margin-bottom: 5px;">SKU: <strong id="audit-sku-lbl"></strong></p>
+                    <p style="font-size: 1.1rem; margin-bottom: 15px;">System Qty: <strong id="audit-sys-qty"></strong></p>
+                    <form id="audit-process-form">
+                        <input type="hidden" id="audit-hidden-sku">
+                        <label style="font-weight: bold;">Actual Physical Count:</label>
+                        <input type="number" id="audit-phys-qty" class="app-input" style="font-size: 1.5rem; text-align: center; width: 60%; margin: 10px auto;" required>
+                        <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
+                            <button type="button" id="cancel-audit-btn" class="btn-outline">Cancel</button>
+                            <button type="submit" class="btn-primary">Save Correction</button>
                         </div>
-                        <div class="app-table-container" style="margin-top: 15px;">
-                            <table class="app-table" id="reorder-print-area">
-                                <thead>
-                                    <tr>
-                                        <th>SKU</th>
-                                        <th>Item Name</th>
-                                        <th>Current Qty</th>
-                                        <th>Target Qty</th>
-                                        <th>Qty To Order</th>
-                                    </tr>
-                                </thead>
-                                <tbody>`;
-            
-            let reorderNeeded = false;
-            invData.items.forEach(item => {
-                const qty = getCurrentQty(item.sku);
-                if (qty <= item.reorderLevel) {
-                    reorderNeeded = true;
-                    let orderAmount = item.targetQty - qty;
-                    html += `<tr>
-                                <td><strong>${item.sku}</strong></td>
-                                <td>${item.name}</td>
-                                <td style=\"color: var(--danger-color); font-weight: bold;\">${qty}</td>
-                                <td>${item.targetQty}</td>
-                                <td style=\"font-weight: bold; font-size: 1.1rem;\">${orderAmount}</td>
-                             </tr>`;
-                }
+                    </form>
+                </div>
+            </div>`;
+
+            const startBtn = document.getElementById('start-scanner');
+            const formArea = document.getElementById('audit-form-area');
+            const readerDiv = document.getElementById('reader');
+
+            const loadAuditItem = (sku) => {
+                const item = invData.items.find(i => i.sku === sku);
+                if (!item) return NotificationSystem.show("SKU not found in Master List", "error");
+                
+                if (html5QrcodeScanner) { html5QrcodeScanner.clear(); startBtn.style.display = 'block'; }
+                
+                document.getElementById('audit-item-name').innerText = item.name;
+                document.getElementById('audit-sku-lbl').innerText = item.sku;
+                document.getElementById('audit-sys-qty').innerText = getCurrentQty(sku);
+                document.getElementById('audit-hidden-sku').value = item.sku;
+                document.getElementById('audit-phys-qty').value = '';
+                
+                readerDiv.classList.add('hidden'); startBtn.classList.add('hidden');
+                formArea.classList.remove('hidden');
+                document.getElementById('audit-phys-qty').focus();
+            };
+
+            document.getElementById('audit-manual-sku').addEventListener('change', (e) => loadAuditItem(e.target.value.toUpperCase()));
+
+            startBtn.addEventListener('click', () => {
+                startBtn.style.display = 'none'; readerDiv.classList.remove('hidden');
+                html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: {width: 250, height: 250} }, false);
+                html5QrcodeScanner.render((decodedText) => { loadAuditItem(decodedText.trim().toUpperCase()); }, (err) => { /* ignore frame errors */ });
             });
 
-            if(!reorderNeeded) html += `<tr><td colspan=\"5\" style=\"text-align:center;\">All stock levels are optimal!</td></tr>`;
-            html += `</tbody></table></div>`;
+            document.getElementById('cancel-audit-btn').addEventListener('click', () => {
+                formArea.classList.add('hidden'); readerDiv.classList.remove('hidden'); startBtn.classList.remove('hidden'); startBtn.style.display = 'block';
+                document.getElementById('audit-manual-sku').value = '';
+            });
+
+            document.getElementById('audit-process-form').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const sku = document.getElementById('audit-hidden-sku').value;
+                const physical = parseFloat(document.getElementById('audit-phys-qty').value);
+                const sysQty = getCurrentQty(sku);
+                const discrepancy = physical - sysQty;
+
+                if (discrepancy !== 0) {
+                    addTransaction('Audit Correction', sku, physical, `System said ${sysQty}, Physical was ${physical}`);
+                    NotificationSystem.show('Audit Correction Logged', 'success');
+                } else {
+                    NotificationSystem.show('Count matches. No change made.', 'success');
+                }
+                
+                formArea.classList.add('hidden'); readerDiv.classList.remove('hidden'); startBtn.style.display = 'block'; startBtn.classList.remove('hidden');
+                document.getElementById('audit-manual-sku').value = '';
+            });
+        }
+        else if (viewName === 'reports') {
+            const reorderList = getReorderList();
+            let html = `
+            <div class="inv-split-layout">
+                <div class="app-card">
+                    <h3 style="margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Database Management</h3>
+                    <p style="color: var(--text-secondary); margin-bottom: 15px;">Import CSV files to populate the database.</p>
+                    
+                    <input type="file" id="csv-import-items" accept=".csv" class="hidden">
+                    <button class="btn-outline" style="width: 100%; margin-bottom: 10px;" onclick="document.getElementById('csv-import-items').click()">📂 Import Master Items CSV</button>
+                    
+                    <input type="file" id="csv-import-trans" accept=".csv" class="hidden">
+                    <button class="btn-outline" style="width: 100%; margin-bottom: 10px;" onclick="document.getElementById('csv-import-trans').click()">📂 Import Transactions CSV</button>
+                    
+                    <hr style="margin: 20px 0;">
+                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 10px;">Note: Full JSON Backups and Wipes are handled in the Global Settings (Gear Icon top right).</p>
+                </div>
+
+                <div class="app-card inv-print-only">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3 style="margin: 0;">Reorder List</h3>
+                        <button id="inv-print-btn" class="btn-primary inv-no-print">🖨️ Print List</button>
+                    </div>
+                    <div class="app-table-container">
+                        <table class="app-table">
+                            <thead><tr><th>SKU</th><th>Item Name</th><th>Qty to Order</th></tr></thead>
+                            <tbody>`;
+            
+            if (reorderList.length === 0) { html += `<tr><td colspan="3" style="text-align:center;">All stock levels are optimal!</td></tr>`; }
+            else {
+                reorderList.forEach(item => {
+                    html += `<tr><td>${item.sku}</td><td>${item.itemName}</td><td><strong style="color: var(--danger-color);">${item.qtyToOrder}</strong></td></tr>`;
+                });
+            }
+            html += `</tbody></table></div></div></div>`;
             stage.innerHTML = html;
 
-            document.getElementById('print-reorder-btn').addEventListener('click', () => {
-                const printContent = document.getElementById('reorder-print-area').outerHTML;
-                const win = window.open('', '', 'width=800,height=600');
-                win.document.write('<html><head><title>Reorder List</title><style>table{width:100%;border-collapse:collapse;}th,td{border:1px solid #000;padding:8px;text-align:left;}</style></head><body>');
-                win.document.write('<h2>Inventory Reorder List</h2>');
-                win.document.write(printContent);
-                win.document.write('</body></html>');
-                win.document.close();
-                win.print();
+            document.getElementById('inv-print-btn').addEventListener('click', () => window.print());
+
+            // PapaParse Integrations
+            document.getElementById('csv-import-items').addEventListener('change', (e) => {
+                if(e.target.files.length > 0) {
+                    Papa.parse(e.target.files[0], { header: true, skipEmptyLines: true, complete: function(results) {
+                        const newItems = results.data.map(row => { return {
+                            sku: row['SKU'] || '', name: row['Item Name'] || '', vendor: row['Vendor'] || '', desc: row['Description'] || '', category: row['Category'] || '', location: row['Location'] || '',
+                            unitCost: parseFloat((row['Unit Cost'] || '0').replace(/[^0-9.-]+/g,"")), reorderLevel: parseInt(row['Reorder Level'] || 0), targetQty: parseInt(row['Target Qty'] || 0)
+                        };}).filter(i => i.sku !== '');
+                        invData.items = newItems; safeSave();
+                        NotificationSystem.show('Master Items Imported!', 'success'); renderInvView('reports');
+                    }});
+                }
+            });
+
+            document.getElementById('csv-import-trans').addEventListener('change', (e) => {
+                if(e.target.files.length > 0) {
+                    Papa.parse(e.target.files[0], { header: true, skipEmptyLines: true, complete: function(results) {
+                        const newTrans = results.data.map(row => { return {
+                            id: crypto.randomUUID(), date: row['Date'] ? new Date(row['Date']).toISOString() : new Date().toISOString(), sku: row['SKU'] || '', type: row['Type'] || 'Stock In',
+                            quantity: parseFloat(row['Quantity'] || 0), actualUnitCost: parseFloat((row['Unit Cost (Actual)'] || '0').replace(/[^0-9.-]+/g,"")), notes: row['Notes'] || ''
+                        };}).filter(t => t.sku !== '');
+                        invData.transactions = newTrans; safeSave();
+                        NotificationSystem.show('Transactions Imported!', 'success'); renderInvView('reports');
+                    }});
+                }
             });
         }
     }
 
-    // --- Modal Logic ---
-
-    // 1. Add Item Modal
-    const itemModal = document.getElementById('inv-item-modal');
-    document.getElementById('inv-add-item-btn').addEventListener('click', () => itemModal.showModal());
-    document.getElementById('close-item-modal').addEventListener('click', () => itemModal.close());
+    // --- Add Manual Item Modal ---
+    const addModal = document.getElementById('inv-add-modal');
+    document.getElementById('inv-add-item-btn').addEventListener('click', () => addModal.showModal());
+    document.getElementById('close-inv-add').addEventListener('click', () => addModal.close());
     
-    document.getElementById('inv-item-form').addEventListener('submit', (e) => {
+    document.getElementById('inv-add-form').addEventListener('submit', (e) => {
         e.preventDefault();
-        const sku = document.getElementById('item-sku').value.toUpperCase();
+        const sku = document.getElementById('new-sku').value.toUpperCase();
+        if(invData.items.find(i => i.sku === sku)) return NotificationSystem.show('SKU already exists!', 'error');
         
-        if(invData.items.find(i => i.sku === sku)) {
-            NotificationSystem.show('SKU already exists!', 'error');
-            return;
-        }
-
         invData.items.push({
-            sku: sku,
-            name: document.getElementById('item-name').value,
-            vendor: document.getElementById('item-vendor').value || '',
-            description: document.getElementById('item-desc').value || '',
-            category: document.getElementById('item-category').value,
-            location: document.getElementById('item-location').value,
-            reorderLevel: parseFloat(document.getElementById('item-reorder').value),
-            targetQty: parseFloat(document.getElementById('item-target').value),
-            unitCost: parseFloat(document.getElementById('item-cost').value)
+            sku: sku, name: document.getElementById('new-name').value, category: document.getElementById('new-cat').value, location: document.getElementById('new-loc').value,
+            reorderLevel: parseFloat(document.getElementById('new-reorder').value), targetQty: parseFloat(document.getElementById('new-target').value), unitCost: parseFloat(document.getElementById('new-cost').value)
         });
-
-        safeSave();
-        e.target.reset();
-        itemModal.close();
-        NotificationSystem.show('Item Added', 'success');
+        safeSave(); e.target.reset(); addModal.close(); NotificationSystem.show('Item Added', 'success');
         renderInvView(document.querySelector('.inv-tab.btn-primary').getAttribute('data-target'));
     });
 
-    // 2. Transaction Modal
-    const transModal = document.getElementById('inv-trans-modal');
-    document.getElementById('inv-log-trans-btn').addEventListener('click', () => {
-        const select = document.getElementById('trans-sku');
-        select.innerHTML = '<option value=\"\">Select an Item...</option>';
-        invData.items.forEach(i => {
-            select.innerHTML += `<option value=\"${i.sku}\">[${i.sku}] ${i.name}</option>`;
-        });
-        transModal.showModal();
-    });
-    document.getElementById('close-trans-modal').addEventListener('click', () => transModal.close());
-
-    document.getElementById('inv-trans-form').addEventListener('submit', (e) => {
-        e.preventDefault();
-        const sku = document.getElementById('trans-sku').value;
-        const item = invData.items.find(i => i.sku === sku);
-
-        invData.transactions.push({
-            id: crypto.randomUUID(),
-            date: new Date().toISOString(),
-            type: document.getElementById('trans-type').value,
-            sku: sku,
-            quantity: parseFloat(document.getElementById('trans-qty').value),
-            actualUnitCost: item ? item.unitCost : 0,
-            notes: document.getElementById('trans-notes').value
-        });
-
-        safeSave();
-        e.target.reset();
-        transModal.close();
-        NotificationSystem.show('Transaction Saved', 'success');
-        renderInvView(document.querySelector('.inv-tab.btn-primary').getAttribute('data-target'));
-    });
-
-    // 3. Audit/Scan Modal (html5-qrcode Integration)
-    const auditModal = document.getElementById('inv-audit-modal');
-    const startScannerBtn = document.getElementById('start-scanner-btn');
-    let html5QrcodeScanner = null;
-    
-    document.getElementById('inv-audit-btn').addEventListener('click', () => {
-        document.getElementById('audit-sku-input').value = '';
-        document.getElementById('audit-result-area').style.display = 'none';
-        document.getElementById('reader').innerHTML = ''; // Clear old scanner instances
-        startScannerBtn.style.display = 'block';
-        auditModal.showModal();
-    });
-    
-    document.getElementById('close-audit-modal').addEventListener('click', () => {
-        if(html5QrcodeScanner) {
-            html5QrcodeScanner.clear().catch(error => console.error("Failed to clear scanner.", error));
-            html5QrcodeScanner = null;
-        }
-        auditModal.close();
-    });
-
-    // Manual Barcode Entry Fallback
-    document.getElementById('audit-sku-input').addEventListener('change', (e) => {
-        processScannedSKU(e.target.value.toUpperCase());
-    });
-
-    startScannerBtn.addEventListener('click', () => {
-        startScannerBtn.style.display = 'none';
-        html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: {width: 250, height: 250} }, false);
-        
-        html5QrcodeScanner.render((decodedText) => {
-            // Stop scanner on success
-            html5QrcodeScanner.clear().then(() => {
-                startScannerBtn.style.display = 'block';
-                processScannedSKU(decodedText.trim().toUpperCase());
-            }).catch(error => console.error("Failed to clear scanner.", error));
-        }, (error) => { /* ignore frame errors */ });
-    });
-
-    function processScannedSKU(sku) {
-        const item = invData.items.find(i => i.sku === sku);
-        if(!item) {
-            NotificationSystem.show('SKU Not Found in Master List', 'error');
-            document.getElementById('audit-sku-input').value = '';
-            return;
-        }
-
-        document.getElementById('audit-sku-input').value = sku;
-        document.getElementById('audit-item-title').innerText = item.name;
-        document.getElementById('audit-sys-qty').innerText = getCurrentQty(sku);
-        document.getElementById('audit-physical-qty').value = '';
-        document.getElementById('audit-result-area').style.display = 'block';
-    }
-
-    document.getElementById('submit-audit-btn').addEventListener('click', () => {
-        const sku = document.getElementById('audit-sku-input').value.toUpperCase();
-        const physicalQty = parseFloat(document.getElementById('audit-physical-qty').value);
-        
-        if (isNaN(physicalQty)) return;
-
-        const systemQty = getCurrentQty(sku);
-        const discrepancy = physicalQty - systemQty;
-
-        if (discrepancy !== 0) {
-            const item = invData.items.find(i => i.sku === sku);
-            invData.transactions.push({
-                id: crypto.randomUUID(),
-                date: new Date().toISOString(),
-                type: 'Audit Correction',
-                sku: sku,
-                quantity: physicalQty, 
-                actualUnitCost: item ? item.unitCost : 0,
-                notes: `System said ${systemQty}, Physical count was ${physicalQty}`
-            });
-            safeSave();
-            NotificationSystem.show('Audit Discrepancy Corrected', 'success');
-        } else {
-            NotificationSystem.show('Count matches system. No change needed.', 'success');
-        }
-
-        if(html5QrcodeScanner) {
-            html5QrcodeScanner.clear().catch(e => console.error(e));
-            html5QrcodeScanner = null;
-        }
-        auditModal.close();
-        renderInvView(document.querySelector('.inv-tab.btn-primary').getAttribute('data-target'));
-    });
-
-    // 4. CSV Imports (PapaParse Integration)
-    document.getElementById('import-items-btn').addEventListener('click', () => document.getElementById('file-import-items').click());
-    document.getElementById('file-import-items').addEventListener('change', (e) => {
-        if(e.target.files.length > 0) {
-            Papa.parse(e.target.files[0], {
-                header: true, skipEmptyLines: true,
-                complete: function(results) {
-                    const newItems = results.data.map(row => {
-                        return {
-                            sku: row['SKU'] || '',
-                            name: row['Item Name'] || '',
-                            vendor: row['Vendor'] || '',
-                            description: row['Description'] || '',
-                            category: row['Category'] || '',
-                            location: row['Location'] || '',
-                            reorderLevel: parseInt(row['Reorder Level'] || 0),
-                            targetQty: parseInt(row['Target Qty'] || 0),
-                            unitCost: parseFloat((row['Unit Cost'] || '0').replace(/[^0-9.-]+/g,""))
-                        };
-                    }).filter(item => item.sku !== '');
-                    
-                    invData.items = newItems;
-                    safeSave();
-                    e.target.value = ''; // reset input
-                    NotificationSystem.show('Master Items Imported Successfully!', 'success');
-                    renderInvView(document.querySelector('.inv-tab.btn-primary').getAttribute('data-target'));
-                }
-            });
-        }
-    });
-
-    document.getElementById('import-trans-btn').addEventListener('click', () => document.getElementById('file-import-trans').click());
-    document.getElementById('file-import-trans').addEventListener('change', (e) => {
-        if(e.target.files.length > 0) {
-            Papa.parse(e.target.files[0], {
-                header: true, skipEmptyLines: true,
-                complete: function(results) {
-                    const newTrans = results.data.map(row => {
-                        return {
-                            id: crypto.randomUUID(),
-                            date: row['Date'] ? new Date(row['Date']).toISOString() : new Date().toISOString(),
-                            sku: row['SKU'] || '',
-                            type: row['Type'] || 'Stock In',
-                            quantity: parseFloat(row['Quantity'] || 0),
-                            actualUnitCost: parseFloat((row['Unit Cost (Actual)'] || '0').replace(/[^0-9.-]+/g,"")),
-                            notes: row['Notes'] || ''
-                        };
-                    }).filter(t => t.sku !== '');
-                    
-                    invData.transactions = newTrans;
-                    safeSave();
-                    e.target.value = '';
-                    NotificationSystem.show('Transactions Imported Successfully!', 'success');
-                    renderInvView(document.querySelector('.inv-tab.btn-primary').getAttribute('data-target'));
-                }
-            });
-        }
-    });
-
-    // Initialize Default View
-    renderInvView('inv-view-dashboard');
+    // Boot
+    renderInvView('dashboard');
 }
