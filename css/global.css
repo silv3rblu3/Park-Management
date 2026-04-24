@@ -1,0 +1,51 @@
+/* css/global.css */
+
+:root {
+    /* These are just fallbacks. The Theme Engine overwrites them instantly. */
+    --bg-base: #f4f7f6;
+    --bg-surface: #ffffff;
+    --text-primary: #333333;
+    --text-secondary: #666666;
+    --accent-primary: #4CAF50;
+    --accent-hover: #45a049;
+    --border-color: #dddddd;
+    --danger-color: #e74c3c;
+    
+    /* Immutable layout variables */
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --shadow-sm: 0 2px 5px rgba(0,0,0,0.1);
+    --shadow-md: 0 4px 15px rgba(0,0,0,0.15);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+
+body { background-color: var(--bg-base); color: var(--text-primary); overflow: hidden; transition: background-color 0.3s ease, color 0.3s ease; }
+
+/* A. Top Navigation Bar */
+#global-header { position: sticky; top: 0; z-index: 999; height: 60px; background-color: var(--bg-surface); border-bottom: 2px solid var(--accent-primary); display: flex; justify-content: space-between; align-items: center; padding: 0 20px; box-shadow: var(--shadow-sm); transition: background-color 0.3s ease, border-color 0.3s ease; }
+.header-left, .header-center, .header-right { display: flex; align-items: center; gap: 15px; }
+.header-center { flex-grow: 1; justify-content: center; max-width: 600px; }
+#app-title { font-size: 1.2rem; font-weight: 600; white-space: nowrap; }
+
+#global-search { width: 100%; padding: 8px 15px; border-radius: 20px; border: 1px solid var(--border-color); background-color: var(--bg-base); color: var(--text-primary); transition: border-color 0.2s ease; }
+#global-search:focus { outline: none; border-color: var(--accent-primary); }
+
+button { background: none; border: none; cursor: pointer; color: var(--text-primary); }
+#bento-trigger, #global-settings-trigger, .icon-btn { display: flex; align-items: center; justify-content: center; padding: 8px; border-radius: var(--radius-md); transition: background-color 0.2s ease; }
+#bento-trigger:hover, #global-settings-trigger:hover, .icon-btn:hover { background-color: rgba(128, 128, 128, 0.15); }
+
+/* B. Bento Menu */
+#bento-menu { position: absolute; top: 65px; left: 15px; background-color: var(--bg-surface); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); padding: 15px; z-index: 1000; width: 320px; opacity: 1; transform: translateY(0); transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s; }
+#bento-menu.hidden { opacity: 0; transform: translateY(-10px); visibility: hidden; pointer-events: none; }
+.bento-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.bento-item { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 15px 5px; border-radius: var(--radius-md); transition: background-color 0.2s, transform 0.1s; }
+.bento-item:hover { background-color: rgba(128, 128, 128, 0.1); transform: translateY(-2px); }
+.bento-icon { font-size: 2rem; margin-bottom: 8px; }
+.bento-label { font-size: 0.8rem; font-weight: bold; color: var(--text-secondary); }
+
+/* C. Main Stage */
+#app-container { height: calc(100vh - 60px); overflow-y: auto; padding: 20px; scroll-behavior: smooth; position: relative; }
+#app-container::-webkit-scrollbar { width: 8px; }
+#app-container::-webkit-scrollbar-track { background: transparent; }
+#app-container::-webkit-scrollbar-thumb { background-color: var(--border-color); border-radius: 4px; }
