@@ -135,6 +135,21 @@
         </div>
     </dialog>
 
+    <dialog id="custom-dialog-modal">
+        <div class="modal-header">
+            <h3 id="cd-title">Notice</h3>
+            <button id="cd-close" class="icon-btn">❌</button>
+        </div>
+        <div class="modal-body" style="text-align: center;">
+            <p id="cd-message" style="margin-bottom: 20px; font-size: 1.1rem;"></p>
+            <input type="text" id="cd-input" class="app-input hidden" style="margin-bottom: 20px; font-size: 1.1rem; text-align: center;">
+            <div style="display: flex; gap: 10px; justify-content: center; margin-top: 10px;">
+                <button id="cd-cancel" class="btn-outline hidden" style="flex: 1;">Cancel</button>
+                <button id="cd-confirm" class="btn-primary" style="flex: 1;">OK</button>
+            </div>
+        </div>
+    </dialog>
+
     <div id="toast-container"></div>
 
     <script src="js/stateManager.js"></script>

@@ -2,6 +2,18 @@
 
 function initFleetLogic() {
     let fleetData = StateManager.getAppData('fleet');
+    
+    // Safety check to ensure full checklist exists
+    if (!fleetData.settings || !fleetData.settings.checklistItems || fleetData.settings.checklistItems.length < 5) {
+        if(!fleetData.settings) fleetData.settings = {};
+        fleetData.settings.checklistItems = [
+            "Oil", "Antifreeze", "Brakes/Lights", "Fan Belt(s)", "Battery & Connections", 
+            "Tire Cond. & Pressure", "Power Steering/Hyd. Oil Level", "Body Appearance", 
+            "Emergency Brake", "Fire Extinguisher", "First Aid Kit", "Wipers & Fluid", "Horn"
+        ];
+        StateManager.setAppData('fleet', fleetData);
+    }
+    
     const safeSave = () => { StateManager.setAppData('fleet', fleetData); };
 
     const tabs = document.querySelectorAll('.fleet-tab');
@@ -48,6 +60,7 @@ function initFleetLogic() {
                     let fails = false;
                     if (lastI.needsWork && lastI.results) {
                         for (const [item, res] of Object.entries(lastI.results)) {
+                            // Verify if it was fixed
                             if (res === 'Fail' && !vSrv.some(s => s.task === item && new Date(s.date) >= new Date(lastI.date))) fails = true;
                         }
                     }
@@ -84,13 +97,13 @@ function initFleetLogic() {
                             <input type="text" id="fi-i" class="app-input" placeholder="Inspector" required>
                             <input type="number" id="fi-o" class="app-input" placeholder="Odometer" required>
                         </div>
-                        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px;" id="fi-grid">
+                        <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:10px;" id="fi-grid">
                             ${fleetData.settings.checklistItems.map((item, idx) => `
                                 <div style="background:rgba(0,0,0,0.03); padding:8px; border-radius:4px; border:1px solid var(--border-color);">
                                     <strong style="display:block; margin-bottom:5px; font-size:0.9rem;">${item}</strong>
-                                    <label><input type="radio" name="f_chk_${idx}" value="Pass" checked> Pass</label>
-                                    <label><input type="radio" name="f_chk_${idx}" value="Fail"> Fail</label>
-                                    <label><input type="radio" name="f_chk_${idx}" value="N/A"> N/A</label>
+                                    <label style="cursor:pointer; margin-right: 5px;"><input type="radio" name="f_chk_${idx}" value="Pass" checked> Pass</label>
+                                    <label style="cursor:pointer; margin-right: 5px;"><input type="radio" name="f_chk_${idx}" value="Fail"> Fail</label>
+                                    <label style="cursor:pointer;"><input type="radio" name="f_chk_${idx}" value="N/A"> N/A</label>
                                 </div>
                             `).join('')}
                         </div>
@@ -124,10 +137,13 @@ function initFleetLogic() {
                 fleetData.inspections.push({ id: crypto.randomUUID(), vehicleId: document.getElementById('fi-v').value, date: document.getElementById('fi-d').value, inspector: document.getElementById('fi-i').value, odo: document.getElementById('fi-o').value, needsWork: fails, results: res });
                 safeSave(); NotificationSystem.show('Inspection Saved', 'success'); renderFleetView('inspections');
             });
-            document.querySelectorAll('.del-i').forEach(b => b.addEventListener('click', (e) => { fleetData.inspections = fleetData.inspections.filter(x => x.id !== e.target.getAttribute('data-id')); safeSave(); renderFleetView('inspections'); }));
+            document.querySelectorAll('.del-i').forEach(b => b.addEventListener('click', async (e) => { 
+                if (await DialogSystem.confirm("Delete Record", "Delete this inspection record permanently?")) {
+                    fleetData.inspections = fleetData.inspections.filter(x => x.id !== e.target.getAttribute('data-id')); safeSave(); renderFleetView('inspections'); 
+                }
+            }));
         }
         else if (viewName === 'services') {
-            // Simplified Services view due to space, mirrors inspections
             let html = `<div style="display:flex; justify-content:space-between; margin-bottom:15px;"><h3>Services Done</h3><button id="flt-new-srv" class="btn-primary">+ Log Service</button></div>
                 <div id="flt-srv-form-cont" class="app-card hidden" style="border:1px solid var(--accent-primary);">
                     <form id="flt-srv-form">
@@ -158,19 +174,26 @@ function initFleetLogic() {
                 fleetData.services.push({ id: crypto.randomUUID(), vehicleId: document.getElementById('fs-v').value, date: document.getElementById('fs-d').value, task: document.getElementById('fs-t').value, odo: document.getElementById('fs-o').value, cost: document.getElementById('fs-c').value });
                 safeSave(); NotificationSystem.show('Service Logged', 'success'); renderFleetView('services');
             });
-            document.querySelectorAll('.del-s').forEach(b => b.addEventListener('click', (e) => { fleetData.services = fleetData.services.filter(x => x.id !== e.target.getAttribute('data-id')); safeSave(); renderFleetView('services'); }));
+            document.querySelectorAll('.del-s').forEach(b => b.addEventListener('click', async (e) => { 
+                if(await DialogSystem.confirm("Delete Service", "Delete this service record?")) {
+                    fleetData.services = fleetData.services.filter(x => x.id !== e.target.getAttribute('data-id')); safeSave(); renderFleetView('services'); 
+                }
+            }));
         }
         else if (viewName === 'vehicle-info') {
-            let html = `<h3>Vehicle Schedules</h3>`;
+            let html = `<div style="display:flex; justify-content:space-between; margin-bottom:15px;"><h3>Vehicle Information</h3><button id="add-new-veh-btn" class="btn-primary">+ Add Vehicle</button></div>`;
             fleetData.vehicles.forEach(v => {
-                html += `<div class="app-table-container" style="margin-top:15px;"><div style="padding:10px; background:var(--accent-primary); color:white; display:flex; justify-content:space-between;"><strong>${v.id} | ${v.desc}</strong></div>
+                html += `<div class="app-table-container" style="margin-top:15px;"><div style="padding:10px; background:var(--accent-primary); color:white; display:flex; justify-content:space-between; align-items: center;"><strong>${v.id} | ${v.desc}</strong> <button class="btn-outline edit-veh-trigger" data-v="${v.id}" style="color: white; border-color: white; padding: 4px 10px; font-size: 0.8rem;">Edit Vehicle</button></div>
                 <table class="app-table"><thead><tr><th>Task</th><th>Interval</th><th>Time</th></tr></thead><tbody>${v.schedule.map(t => `<tr><td>${t.task}</td><td>${t.interval} ${t.unit}</td><td>${t.timeInterval}</td></tr>`).join('')}</tbody></table></div>`;
             });
             stage.innerHTML = html;
+
+            document.getElementById('add-new-veh-btn').addEventListener('click', () => openVehicleEditor(null));
+            document.querySelectorAll('.edit-veh-trigger').forEach(b => b.addEventListener('click', (e) => openVehicleEditor(e.target.getAttribute('data-v'))));
         }
         else if (viewName === 'settings') {
             stage.innerHTML = `<h3>Checklist Config</h3><p>Edit items appearing on the Monthly Inspection Form.</p>
-            <textarea id="flt-check-edit" class="app-input" rows="10">${fleetData.settings.checklistItems.join('\n')}</textarea>
+            <textarea id="flt-check-edit" class="app-input" rows="12">${fleetData.settings.checklistItems.join('\n')}</textarea>
             <button id="flt-save-check" class="btn-primary">Save Config</button>`;
             document.getElementById('flt-save-check').addEventListener('click', () => {
                 fleetData.settings.checklistItems = document.getElementById('flt-check-edit').value.split('\n').map(s=>s.trim()).filter(s=>s!=='');
@@ -179,7 +202,81 @@ function initFleetLogic() {
         }
     }
 
-    // Modal Logistics
+    // --- Vehicle Editor Modal Logic ---
+    const editVehModal = document.getElementById('fleet-edit-veh-modal');
+    let tempSchedule = [];
+
+    function renderScheduleEditor() {
+        const cont = document.getElementById('edit-v-schedule-container');
+        cont.innerHTML = tempSchedule.map((t, idx) => `
+            <div style="display:flex; gap:5px; margin-bottom:5px; background: rgba(0,0,0,0.03); padding: 5px; border-radius: 4px;">
+                <input type="text" class="app-input s-task" value="${t.task}" placeholder="Task Name" data-idx="${idx}" style="margin:0; flex: 2;">
+                <input type="text" class="app-input s-int" value="${t.interval}" placeholder="e.g. 5000" data-idx="${idx}" style="margin:0; flex: 1;">
+                <input type="text" class="app-input s-unit" value="${t.unit}" placeholder="Miles/Hrs" data-idx="${idx}" style="margin:0; flex: 1;">
+                <input type="text" class="app-input s-time" value="${t.timeInterval}" placeholder="Time" data-idx="${idx}" style="margin:0; flex: 1;">
+                <button type="button" class="btn-danger rem-task-btn" data-idx="${idx}">X</button>
+            </div>
+        `).join('');
+
+        document.querySelectorAll('.s-task').forEach(inp => inp.addEventListener('input', (e) => tempSchedule[e.target.getAttribute('data-idx')].task = e.target.value));
+        document.querySelectorAll('.s-int').forEach(inp => inp.addEventListener('input', (e) => tempSchedule[e.target.getAttribute('data-idx')].interval = e.target.value));
+        document.querySelectorAll('.s-unit').forEach(inp => inp.addEventListener('input', (e) => tempSchedule[e.target.getAttribute('data-idx')].unit = e.target.value));
+        document.querySelectorAll('.s-time').forEach(inp => inp.addEventListener('input', (e) => tempSchedule[e.target.getAttribute('data-idx')].timeInterval = e.target.value));
+        document.querySelectorAll('.rem-task-btn').forEach(b => b.addEventListener('click', (e) => { tempSchedule.splice(e.target.getAttribute('data-idx'), 1); renderScheduleEditor(); }));
+    }
+
+    function openVehicleEditor(vId) {
+        document.getElementById('edit-v-original-id').value = vId || '';
+        document.getElementById('edit-v-delete-btn').classList.toggle('hidden', !vId);
+        if (vId) {
+            const v = fleetData.vehicles.find(x => x.id === vId);
+            document.getElementById('edit-v-id').value = v.id;
+            document.getElementById('edit-v-desc').value = v.desc;
+            tempSchedule = JSON.parse(JSON.stringify(v.schedule || []));
+        } else {
+            document.getElementById('edit-v-id').value = '';
+            document.getElementById('edit-v-desc').value = '';
+            tempSchedule = [];
+        }
+        renderScheduleEditor();
+        editVehModal.showModal();
+    }
+
+    document.getElementById('close-edit-veh-modal').addEventListener('click', () => editVehModal.close());
+    document.getElementById('edit-v-add-task-btn').addEventListener('click', () => { tempSchedule.push({task: '', interval: '', unit: '', timeInterval: ''}); renderScheduleEditor(); });
+    
+    document.getElementById('fleet-edit-veh-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const origId = document.getElementById('edit-v-original-id').value;
+        const newId = document.getElementById('edit-v-id').value.toUpperCase();
+        const newDesc = document.getElementById('edit-v-desc').value;
+
+        if(origId && origId !== newId) {
+            // Rename logic
+            const v = fleetData.vehicles.find(x => x.id === origId);
+            v.id = newId; v.desc = newDesc; v.schedule = tempSchedule;
+            // Update historical logs
+            fleetData.inspections.forEach(i => { if(i.vehicleId === origId) i.vehicleId = newId; });
+            fleetData.services.forEach(s => { if(s.vehicleId === origId) s.vehicleId = newId; });
+        } else if (origId) {
+            const v = fleetData.vehicles.find(x => x.id === origId);
+            v.desc = newDesc; v.schedule = tempSchedule;
+        } else {
+            if(fleetData.vehicles.find(x => x.id === newId)) return NotificationSystem.show("ID already exists", "error");
+            fleetData.vehicles.push({ id: newId, desc: newDesc, schedule: tempSchedule });
+        }
+        safeSave(); editVehModal.close(); NotificationSystem.show("Vehicle Saved", "success"); renderFleetView('vehicle-info');
+    });
+
+    document.getElementById('edit-v-delete-btn').addEventListener('click', async () => {
+        if(await DialogSystem.confirm("Delete Vehicle", "Delete this vehicle? Historical service logs will remain but orphaned.")) {
+            const origId = document.getElementById('edit-v-original-id').value;
+            fleetData.vehicles = fleetData.vehicles.filter(x => x.id !== origId);
+            safeSave(); editVehModal.close(); NotificationSystem.show("Vehicle Deleted", "success"); renderFleetView('vehicle-info');
+        }
+    });
+
+    // --- Repair Modal ---
     const repModal = document.getElementById('fleet-repair-modal');
     document.getElementById('close-repair-modal').addEventListener('click', () => repModal.close());
 
@@ -190,7 +287,7 @@ function initFleetLogic() {
         if(lastI.results) { for (const [item, res] of Object.entries(lastI.results)) { if (res === 'Fail' && !fleetData.services.some(s => s.vehicleId === vId && s.task === item && new Date(s.date) >= new Date(lastI.date))) fails.push(item); } }
         
         const list = document.getElementById('fleet-repair-list');
-        list.innerHTML = fails.length === 0 ? '<p>All fixed!</p>' : fails.map(f => `<div class="btn-danger log-rep" data-v="${vId}" data-t="${f}" style="text-align:left;">⚠️ ${f} - Log Repair ➔</div>`).join('');
+        list.innerHTML = fails.length === 0 ? '<p>All fixed!</p>' : fails.map(f => `<div class="btn-danger log-rep" data-v="${vId}" data-t="${f}" style="text-align:left; padding: 10px; cursor: pointer; border-radius: 4px; margin-bottom: 5px;">⚠️ ${f} - Log Repair ➔</div>`).join('');
         repModal.showModal();
 
         document.querySelectorAll('.log-rep').forEach(b => b.addEventListener('click', (e) => {
@@ -206,7 +303,7 @@ function initFleetLogic() {
         }, 50);
     }
 
-    // Print Logic
+    // --- Print Logic ---
     const printModal = document.getElementById('fleet-print-modal');
     document.getElementById('close-print-modal').addEventListener('click', () => printModal.close());
     
@@ -219,22 +316,42 @@ function initFleetLogic() {
     function populatePrintModal() {
         document.getElementById('fleet-print-single-select').innerHTML = fleetData.vehicles.map(v => `<option value="${v.id}">${v.id}</option>`).join('');
         document.getElementById('fleet-print-custom-wrapper').innerHTML = fleetData.vehicles.map(v => `<label style="display:block;"><input type="checkbox" class="pc-chk" value="${v.id}"> ${v.id}</label>`).join('');
+        document.getElementById('fleet-print-blank').checked = false;
     }
 
     document.getElementById('fleet-execute-print').addEventListener('click', () => {
         const mode = document.getElementById('fleet-print-mode').value;
+        const printBlank = document.getElementById('fleet-print-blank').checked;
         let sels = [];
+        
         if(mode === 'all') sels = fleetData.vehicles.map(v=>v.id);
         else if(mode === 'single') sels = [document.getElementById('fleet-print-single-select').value];
         else document.querySelectorAll('.pc-chk:checked').forEach(c => sels.push(c.value));
 
-        if(sels.length === 0) return NotificationSystem.show("No vehicles selected", "error");
+        if(sels.length === 0 && !printBlank) return NotificationSystem.show("No vehicles selected", "error");
 
         let printHtml = '';
         sels.forEach(vId => {
+            const vData = fleetData.vehicles.find(v => v.id === vId);
+            
+            // Blank Form Logic
+            if (printBlank) {
+                let blankHtml = `<div style="page-break-after:always; margin-bottom: 20px;"><h2 style="text-align:center; border-bottom:2px solid #000; padding-bottom: 10px;">Monthly Vehicle Inspection</h2>
+                <div style="display:grid; grid-template-columns:1fr 1fr; margin-bottom:15px; font-size:12px;"><div><strong>Vehicle:</strong> ${vId} (${vData?vData.desc:''})</div><div><strong>Date:</strong> ________________</div><div><strong>Inspector:</strong> ________________</div><div><strong>Odometer:</strong> ________________</div></div>
+                <table style="width:100%; border-collapse:collapse; font-size:12px;"><thead><tr><th style="border:1px solid #000; background:#eee; padding:5px;">Item</th><th style="border:1px solid #000; background:#eee; padding:5px;">Result</th><th style="border:1px solid #000; background:#eee; padding:5px;">Item</th><th style="border:1px solid #000; background:#eee; padding:5px;">Result</th></tr></thead><tbody>`;
+                
+                const cl = fleetData.settings.checklistItems;
+                for(let i=0; i<cl.length; i+=2) {
+                    blankHtml += `<tr><td style="border:1px solid #000; padding:8px;">${cl[i]}</td><td style="border:1px solid #000; padding:8px;">Pass / Fail / NA</td>${cl[i+1] ? `<td style="border:1px solid #000; padding:8px;">${cl[i+1]}</td><td style="border:1px solid #000; padding:8px;">Pass / Fail / NA</td>` : `<td></td><td></td>`}</tr>`;
+                }
+                blankHtml += `</tbody></table></div>`;
+                printHtml += blankHtml;
+                return; // Continue to next vehicle
+            }
+
+            // Normal Data Print Logic
             const insp = fleetData.inspections.filter(i => i.vehicleId === vId).sort((a,b) => new Date(b.date) - new Date(a.date))[0];
             if(!insp) return;
-            const vData = fleetData.vehicles.find(v => v.id === vId);
             
             let rowHtml = '';
             if(insp.results) {
@@ -245,9 +362,9 @@ function initFleetLogic() {
                 }
             }
 
-            printHtml += `<div style="page-break-after:always; margin-bottom: 20px;"><h2 style="text-align:center; border-bottom:2px solid #000;">Monthly Vehicle Inspection</h2>
+            printHtml += `<div style="page-break-after:always; margin-bottom: 20px;"><h2 style="text-align:center; border-bottom:2px solid #000; padding-bottom:10px;">Monthly Vehicle Inspection</h2>
             <div style="display:grid; grid-template-columns:1fr 1fr; margin-bottom:15px; font-size:12px;"><div><strong>Vehicle:</strong> ${vId} (${vData?vData.desc:''})</div><div><strong>Date:</strong> ${insp.date}</div><div><strong>Inspector:</strong> ${insp.inspector}</div><div><strong>Odometer:</strong> ${insp.odo}</div></div>
-            <table style="width:100%; border-collapse:collapse; font-size:12px;"><thead><tr><th style="border:1px solid #000; background:#eee;">Item</th><th style="border:1px solid #000; background:#eee;">Result</th><th style="border:1px solid #000; background:#eee;">Item</th><th style="border:1px solid #000; background:#eee;">Result</th></tr></thead><tbody>${rowHtml}</tbody></table></div>`;
+            <table style="width:100%; border-collapse:collapse; font-size:12px;"><thead><tr><th style="border:1px solid #000; background:#eee; padding:5px;">Item</th><th style="border:1px solid #000; background:#eee; padding:5px;">Result</th><th style="border:1px solid #000; background:#eee; padding:5px;">Item</th><th style="border:1px solid #000; background:#eee; padding:5px;">Result</th></tr></thead><tbody>${rowHtml}</tbody></table></div>`;
         });
 
         if(!printHtml) return NotificationSystem.show("No records found to print", "error");

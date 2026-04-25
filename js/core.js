@@ -175,14 +175,32 @@ const CoreSystem = {
             });
         }
 
-        // 2. Calculate Fleet Glance
+        // 2. Calculate Fleet Glance (Fixed Logic)
         let fleetIssues = 0;
         let totalVehicles = state.apps.fleet?.vehicles?.length || 0;
-        if (state.apps.fleet && state.apps.fleet.inspections) {
-            // Count vehicles with failed inspections that aren't fixed
+        if (state.apps.fleet && state.apps.fleet.vehicles) {
             state.apps.fleet.vehicles.forEach(v => {
-                const vInsp = state.apps.fleet.inspections.filter(i => i.vehicleId === v.id).sort((a,b) => new Date(b.date) - new Date(a.date));
-                if(vInsp.length > 0 && vInsp[0].needsWork) fleetIssues++;
+                const vSrv = (state.apps.fleet.services || []).filter(s => s.vehicleId === v.id).sort((a,b) => new Date(b.date) - new Date(a.date));
+                const vInsp = (state.apps.fleet.inspections || []).filter(i => i.vehicleId === v.id).sort((a,b) => new Date(b.date) - new Date(a.date));
+                
+                let fails = false;
+                let needsInsp = true;
+
+                if (vInsp.length > 0) {
+                    const lastI = vInsp[0];
+                    const dDiff = Math.ceil((new Date(lastI.date).getTime() + 30*24*60*60*1000 - new Date()) / (1000*60*60*24));
+                    if (dDiff >= 0) needsInsp = false;
+
+                    // Check if fails were fixed by a subsequent service
+                    if (lastI.needsWork && lastI.results) {
+                        for (const [item, res] of Object.entries(lastI.results)) {
+                            if (res === 'Fail' && !vSrv.some(s => s.task === item && new Date(s.date) >= new Date(lastI.date))) {
+                                fails = true;
+                            }
+                        }
+                    }
+                }
+                if (fails || needsInsp) fleetIssues++;
             });
         }
 
@@ -205,7 +223,7 @@ const CoreSystem = {
                         <h3 style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;"><span style="font-size: 1.5rem;">🛻</span> Fleet Status</h3>
                         <p style="margin-bottom: 5px;"><strong>${totalVehicles}</strong> Registered Vehicles</p>
                         ${fleetIssues > 0 
-                            ? `<p><strong style="color: var(--danger-color);">${fleetIssues}</strong> vehicle(s) currently need repair or service.</p>`
+                            ? `<p><strong style="color: var(--danger-color); font-size: 1.2rem;">${fleetIssues}</strong> vehicle(s) need inspection or repair.</p>`
                             : `<p style="color: var(--text-secondary);">All vehicles fully operational.</p>`}
                     </div>
 

@@ -168,12 +168,17 @@ function initFirstAidLogic() {
             addBtn.style.backgroundColor = "transparent";
             addBtn.style.color = "var(--accent-primary)";
             addBtn.innerText = '+ New Category';
-            addBtn.onclick = () => {
-                const newId = 'cat_' + Date.now();
-                faData.categories.push({ id: newId, name: 'New Category', count: 1, calcMethod: 'direct' });
-                faData.activeCategoryId = newId; 
-                safeSave();
-                renderApp();
+            
+            // USING ASYNC CUSTOM DIALOG
+            addBtn.onclick = async () => {
+                const newName = await DialogSystem.prompt("New Category", "Enter a name for the new first aid category:");
+                if(newName && newName !== true) {
+                    const newId = 'cat_' + Date.now();
+                    faData.categories.push({ id: newId, name: newName, count: 1, calcMethod: 'direct' });
+                    faData.activeCategoryId = newId; 
+                    safeSave();
+                    renderApp();
+                }
             };
             container.appendChild(addBtn);
         }
@@ -229,8 +234,10 @@ function initFirstAidLogic() {
                 category.calcMethod = e.target.value;
                 safeSave(); renderApp();
             });
-            document.getElementById('delete-cat-btn').addEventListener('click', () => {
-                if (confirm("Delete this category?")) {
+            
+            // USING ASYNC CUSTOM DIALOG
+            document.getElementById('delete-cat-btn').addEventListener('click', async () => {
+                if (await DialogSystem.confirm("Delete Category", "Are you sure you want to permanently delete this entire category and all its items?")) {
                     faData.categories = faData.categories.filter(c => c.id !== category.id);
                     faData.items = faData.items.filter(i => i.categoryId !== category.id);
                     faData.activeCategoryId = faData.categories.length > 0 ? faData.categories[0].id : null;
@@ -309,10 +316,14 @@ function initFirstAidLogic() {
                     safeSave(); renderActiveCategory();
                 });
             });
+            
+            // USING ASYNC CUSTOM DIALOG
             document.querySelectorAll('.fa-delete-item-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    faData.items = faData.items.filter(i => i.id !== e.target.getAttribute('data-id'));
-                    safeSave(); renderActiveCategory();
+                btn.addEventListener('click', async (e) => {
+                    if (await DialogSystem.confirm("Remove Supply", "Remove this supply item from the category?")) {
+                        faData.items = faData.items.filter(i => i.id !== e.target.getAttribute('data-id'));
+                        safeSave(); renderActiveCategory();
+                    }
                 });
             });
         } else {
