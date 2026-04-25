@@ -12,6 +12,10 @@ function renderFleetApp() {
             <button class="fleet-tab btn-outline" data-target="settings">Settings</button>
         </div>
 
+        <input type="file" id="fleet-import-insp-file" accept=".json" style="display: none;">
+        <input type="file" id="fleet-import-srv-file" accept=".json" style="display: none;">
+        <input type="file" id="fleet-import-veh-file" accept=".json" style="display: none;">
+
         <div id="fleet-stage" class="app-card" style="min-height: 50vh;">
             </div>
 

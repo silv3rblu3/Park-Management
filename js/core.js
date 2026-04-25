@@ -175,9 +175,11 @@ const CoreSystem = {
             });
         }
 
-        // 2. Calculate Fleet Glance (Fixed Logic)
-        let fleetIssues = 0;
+        // 2. Calculate Fleet Glance (Separated Logic)
+        let vehiclesNeedingRepair = 0;
+        let vehiclesNeedingInsp = 0;
         let totalVehicles = state.apps.fleet?.vehicles?.length || 0;
+        
         if (state.apps.fleet && state.apps.fleet.vehicles) {
             state.apps.fleet.vehicles.forEach(v => {
                 const vSrv = (state.apps.fleet.services || []).filter(s => s.vehicleId === v.id).sort((a,b) => new Date(b.date) - new Date(a.date));
@@ -189,9 +191,11 @@ const CoreSystem = {
                 if (vInsp.length > 0) {
                     const lastI = vInsp[0];
                     const dDiff = Math.ceil((new Date(lastI.date).getTime() + 30*24*60*60*1000 - new Date()) / (1000*60*60*24));
+                    
+                    // If it's been less than 30 days, it doesn't need an inspection
                     if (dDiff >= 0) needsInsp = false;
 
-                    // Check if fails were fixed by a subsequent service
+                    // Verify if past failed items were fixed by a subsequent service
                     if (lastI.needsWork && lastI.results) {
                         for (const [item, res] of Object.entries(lastI.results)) {
                             if (res === 'Fail' && !vSrv.some(s => s.task === item && new Date(s.date) >= new Date(lastI.date))) {
@@ -200,7 +204,9 @@ const CoreSystem = {
                         }
                     }
                 }
-                if (fails || needsInsp) fleetIssues++;
+                
+                if (fails) vehiclesNeedingRepair++;
+                if (needsInsp) vehiclesNeedingInsp++;
             });
         }
 
@@ -221,10 +227,13 @@ const CoreSystem = {
 
                     <div class="app-card searchable-card" style="cursor: pointer; border-top: 4px solid var(--accent-primary); transition: transform 0.2s;" onclick="CoreSystem.routeToApp('fleet')" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform='translateY(0)'">
                         <h3 style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;"><span style="font-size: 1.5rem;">🛻</span> Fleet Status</h3>
-                        <p style="margin-bottom: 5px;"><strong>${totalVehicles}</strong> Registered Vehicles</p>
-                        ${fleetIssues > 0 
-                            ? `<p><strong style="color: var(--danger-color); font-size: 1.2rem;">${fleetIssues}</strong> vehicle(s) need inspection or repair.</p>`
-                            : `<p style="color: var(--text-secondary);">All vehicles fully operational.</p>`}
+                        <p style="margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;"><strong>${totalVehicles}</strong> Registered Vehicles</p>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 5px;">
+                            ${vehiclesNeedingRepair > 0 ? `<p><strong style="color: var(--danger-color); font-size: 1.1rem;">${vehiclesNeedingRepair}</strong> vehicle(s) need repair.</p>` : ''}
+                            ${vehiclesNeedingInsp > 0 ? `<p><strong style="color: #f39c12; font-size: 1.1rem;">${vehiclesNeedingInsp}</strong> vehicle(s) need inspection.</p>` : ''}
+                            ${(vehiclesNeedingRepair === 0 && vehiclesNeedingInsp === 0) ? `<p style="color: var(--text-secondary);">All vehicles fully operational.</p>` : ''}
+                        </div>
                     </div>
 
                     <div class="app-card searchable-card" style="cursor: pointer; border-top: 4px solid var(--accent-primary); transition: transform 0.2s;" onclick="CoreSystem.routeToApp('winterization')" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform='translateY(0)'">

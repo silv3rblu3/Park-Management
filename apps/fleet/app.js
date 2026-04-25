@@ -3,18 +3,116 @@
 function initFleetLogic() {
     let fleetData = StateManager.getAppData('fleet');
     
-    // Safety check to ensure full checklist exists
-    if (!fleetData.settings || !fleetData.settings.checklistItems || fleetData.settings.checklistItems.length < 5) {
-        if(!fleetData.settings) fleetData.settings = {};
-        fleetData.settings.checklistItems = [
-            "Oil", "Antifreeze", "Brakes/Lights", "Fan Belt(s)", "Battery & Connections", 
-            "Tire Cond. & Pressure", "Power Steering/Hyd. Oil Level", "Body Appearance", 
-            "Emergency Brake", "Fire Extinguisher", "First Aid Kit", "Wipers & Fluid", "Horn"
-        ];
+    if (!fleetData.vehicles || fleetData.vehicles.length === 0 || !fleetData.settings) {
+        fleetData = JSON.parse(JSON.stringify(StateManager.defaultState.apps.fleet));
         StateManager.setAppData('fleet', fleetData);
     }
     
     const safeSave = () => { StateManager.setAppData('fleet', fleetData); };
+
+    const getToday = () => {
+        const d = new Date();
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    };
+
+    // --- TARGETED DATA SYNC LISTENERS ---
+    const inspFileInput = document.getElementById('fleet-import-insp-file');
+    if (inspFileInput) {
+        const newInspFile = inspFileInput.cloneNode(true);
+        inspFileInput.parentNode.replaceChild(newInspFile, inspFileInput);
+        newInspFile.addEventListener('change', (e) => {
+            if(e.target.files.length > 0) {
+                const reader = new FileReader();
+                reader.onload = async function(evt) {
+                    try {
+                        const imported = JSON.parse(evt.target.result);
+                        if(!Array.isArray(imported)) throw new Error("Invalid format");
+                        let newCount = 0;
+                        imported.forEach(impLog => {
+                            if(!fleetData.inspections.find(i => i.id === impLog.id)) {
+                                fleetData.inspections.push(impLog);
+                                newCount++;
+                            }
+                        });
+                        safeSave();
+                        await DialogSystem.alert("Sync Complete", `Successfully merged ${newCount} new inspection logs.`);
+                        if (document.querySelector('.fleet-tab.btn-primary').getAttribute('data-target') === 'inspections') {
+                            renderFleetView('inspections');
+                        }
+                    } catch(err) { NotificationSystem.show("Failed to import. Invalid JSON.", "error"); }
+                    e.target.value = '';
+                };
+                reader.readAsText(e.target.files[0]);
+            }
+        });
+    }
+
+    const srvFileInput = document.getElementById('fleet-import-srv-file');
+    if (srvFileInput) {
+        const newSrvFile = srvFileInput.cloneNode(true);
+        srvFileInput.parentNode.replaceChild(newSrvFile, srvFileInput);
+        newSrvFile.addEventListener('change', (e) => {
+            if(e.target.files.length > 0) {
+                const reader = new FileReader();
+                reader.onload = async function(evt) {
+                    try {
+                        const imported = JSON.parse(evt.target.result);
+                        if(!Array.isArray(imported)) throw new Error("Invalid format");
+                        let newCount = 0;
+                        imported.forEach(impLog => {
+                            if(!fleetData.services.find(s => s.id === impLog.id)) {
+                                fleetData.services.push(impLog);
+                                newCount++;
+                            }
+                        });
+                        safeSave();
+                        await DialogSystem.alert("Sync Complete", `Successfully merged ${newCount} new service logs.`);
+                        if (document.querySelector('.fleet-tab.btn-primary').getAttribute('data-target') === 'services') {
+                            renderFleetView('services');
+                        }
+                    } catch(err) { NotificationSystem.show("Failed to import. Invalid JSON.", "error"); }
+                    e.target.value = '';
+                };
+                reader.readAsText(e.target.files[0]);
+            }
+        });
+    }
+
+    const vehFileInput = document.getElementById('fleet-import-veh-file');
+    if (vehFileInput) {
+        const newVehFile = vehFileInput.cloneNode(true);
+        vehFileInput.parentNode.replaceChild(newVehFile, vehFileInput);
+        newVehFile.addEventListener('change', (e) => {
+            if(e.target.files.length > 0) {
+                const reader = new FileReader();
+                reader.onload = async function(evt) {
+                    try {
+                        const imported = JSON.parse(evt.target.result);
+                        if(!Array.isArray(imported)) throw new Error("Invalid format");
+                        let added = 0;
+                        let updated = 0;
+                        imported.forEach(impVeh => {
+                            const existingIdx = fleetData.vehicles.findIndex(v => v.id === impVeh.id);
+                            if(existingIdx >= 0) {
+                                fleetData.vehicles[existingIdx] = impVeh;
+                                updated++;
+                            } else {
+                                fleetData.vehicles.push(impVeh);
+                                added++;
+                            }
+                        });
+                        safeSave();
+                        await DialogSystem.alert("Sync Complete", `Vehicles updated: ${updated}. New vehicles added: ${added}.`);
+                        if (document.querySelector('.fleet-tab.btn-primary').getAttribute('data-target') === 'vehicle-info') {
+                            renderFleetView('vehicle-info');
+                        }
+                    } catch(err) { NotificationSystem.show("Failed to import. Invalid JSON.", "error"); }
+                    e.target.value = '';
+                };
+                reader.readAsText(e.target.files[0]);
+            }
+        });
+    }
 
     const tabs = document.querySelectorAll('.fleet-tab');
     const stage = document.getElementById('fleet-stage');
@@ -26,6 +124,16 @@ function initFleetLogic() {
             renderFleetView(e.target.getAttribute('data-target'));
         });
     });
+
+    function updateServiceDatalist(vId) {
+        let options = new Set(fleetData.settings.checklistItems);
+        if (vId) {
+            const v = fleetData.vehicles.find(x => x.id === vId);
+            if (v && v.schedule) v.schedule.forEach(t => options.add(t.task));
+        }
+        const fsList = document.getElementById('fs-list');
+        if (fsList) fsList.innerHTML = Array.from(options).map(t => `<option value="${t}">`).join('');
+    }
 
     function renderFleetView(viewName) {
         stage.innerHTML = '';
@@ -60,7 +168,6 @@ function initFleetLogic() {
                     let fails = false;
                     if (lastI.needsWork && lastI.results) {
                         for (const [item, res] of Object.entries(lastI.results)) {
-                            // Verify if it was fixed
                             if (res === 'Fail' && !vSrv.some(s => s.task === item && new Date(s.date) >= new Date(lastI.date))) fails = true;
                         }
                     }
@@ -82,9 +189,11 @@ function initFleetLogic() {
         }
         else if (viewName === 'inspections') {
             let html = `
-                <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:15px; flex-wrap: wrap; gap: 10px;">
                     <h3>Monthly Inspections</h3>
-                    <div>
+                    <div style="display: flex; gap: 10px;">
+                        <button id="flt-sync-insp-exp" class="btn-outline" title="Export Logs to JSON">⬇️ Sync Out</button>
+                        <button id="flt-sync-insp-imp" class="btn-outline" title="Merge Logs from JSON">⬆️ Sync In</button>
                         <button id="flt-new-insp" class="btn-primary">+ New Inspection</button>
                         <button id="flt-print-rep" class="btn-outline">🖨️ Print Reports</button>
                     </div>
@@ -124,9 +233,23 @@ function initFleetLogic() {
                 </div>`;
             stage.innerHTML = html;
 
-            document.getElementById('flt-new-insp').addEventListener('click', () => document.getElementById('flt-insp-form-cont').classList.toggle('hidden'));
+            document.getElementById('flt-new-insp').addEventListener('click', () => { 
+                document.getElementById('flt-insp-form-cont').classList.toggle('hidden');
+                document.getElementById('fi-d').value = getToday();
+            });
             document.getElementById('flt-print-rep').addEventListener('click', () => { populatePrintModal(); document.getElementById('fleet-print-modal').showModal(); });
             
+            document.getElementById('flt-sync-insp-exp').addEventListener('click', () => {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(fleetData.inspections, null, 2));
+                const anchor = document.createElement('a'); anchor.setAttribute("href", dataStr);
+                anchor.setAttribute("download", `Fleet_Inspections_Sync_${getToday()}.json`);
+                document.body.appendChild(anchor); anchor.click(); anchor.remove();
+                NotificationSystem.show("Inspection Logs Exported", "success");
+            });
+            document.getElementById('flt-sync-insp-imp').addEventListener('click', () => {
+                document.getElementById('fleet-import-insp-file').click();
+            });
+
             document.getElementById('flt-insp-form').addEventListener('submit', (e) => {
                 e.preventDefault();
                 let res = {}; let fails = false;
@@ -144,12 +267,20 @@ function initFleetLogic() {
             }));
         }
         else if (viewName === 'services') {
-            let html = `<div style="display:flex; justify-content:space-between; margin-bottom:15px;"><h3>Services Done</h3><button id="flt-new-srv" class="btn-primary">+ Log Service</button></div>
+            let html = `
+                <div style="display:flex; justify-content:space-between; margin-bottom:15px; flex-wrap: wrap; gap: 10px;">
+                    <h3>Services Done</h3>
+                    <div style="display: flex; gap: 10px;">
+                        <button id="flt-sync-srv-exp" class="btn-outline" title="Export Logs to JSON">⬇️ Sync Out</button>
+                        <button id="flt-sync-srv-imp" class="btn-outline" title="Merge Logs from JSON">⬆️ Sync In</button>
+                        <button id="flt-new-srv" class="btn-primary">+ Log Service</button>
+                    </div>
+                </div>
                 <div id="flt-srv-form-cont" class="app-card hidden" style="border:1px solid var(--accent-primary);">
                     <form id="flt-srv-form">
                         <select id="fs-v" class="app-select" required><option value="">Select Vehicle</option>${fleetData.vehicles.map(v=>`<option value="${v.id}">${v.id}</option>`).join('')}</select>
                         <input type="date" id="fs-d" class="app-input" required>
-                        <input type="text" id="fs-t" class="app-input" placeholder="Task Performed" required list="fs-list">
+                        <input type="text" id="fs-t" class="app-input" placeholder="Task Performed (Type or select...)" required list="fs-list" autocomplete="off">
                         <datalist id="fs-list"></datalist>
                         <input type="number" id="fs-o" class="app-input" placeholder="Odometer" required>
                         <input type="number" step="0.01" id="fs-c" class="app-input" placeholder="Cost $" required>
@@ -163,11 +294,28 @@ function initFleetLogic() {
                     </table>
                 </div>`;
             stage.innerHTML = html;
+            
+            updateServiceDatalist(''); 
 
-            document.getElementById('flt-new-srv').addEventListener('click', () => document.getElementById('flt-srv-form-cont').classList.toggle('hidden'));
+            document.getElementById('flt-new-srv').addEventListener('click', () => {
+                document.getElementById('flt-srv-form-cont').classList.toggle('hidden');
+                document.getElementById('fs-d').value = getToday();
+                updateServiceDatalist(document.getElementById('fs-v').value);
+            });
+            
+            document.getElementById('flt-sync-srv-exp').addEventListener('click', () => {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(fleetData.services, null, 2));
+                const anchor = document.createElement('a'); anchor.setAttribute("href", dataStr);
+                anchor.setAttribute("download", `Fleet_Services_Sync_${getToday()}.json`);
+                document.body.appendChild(anchor); anchor.click(); anchor.remove();
+                NotificationSystem.show("Service Logs Exported", "success");
+            });
+            document.getElementById('flt-sync-srv-imp').addEventListener('click', () => {
+                document.getElementById('fleet-import-srv-file').click();
+            });
+
             document.getElementById('fs-v').addEventListener('change', (e) => {
-                const v = fleetData.vehicles.find(x => x.id === e.target.value);
-                document.getElementById('fs-list').innerHTML = v ? v.schedule.map(t => `<option value="${t.task}">`).join('') : '';
+                updateServiceDatalist(e.target.value);
             });
             document.getElementById('flt-srv-form').addEventListener('submit', (e) => {
                 e.preventDefault();
@@ -181,19 +329,39 @@ function initFleetLogic() {
             }));
         }
         else if (viewName === 'vehicle-info') {
-            let html = `<div style="display:flex; justify-content:space-between; margin-bottom:15px;"><h3>Vehicle Information</h3><button id="add-new-veh-btn" class="btn-primary">+ Add Vehicle</button></div>`;
+            let html = `
+                <div style="display:flex; justify-content:space-between; margin-bottom:15px; flex-wrap: wrap; gap: 10px;">
+                    <h3>Vehicle Information</h3>
+                    <div style="display: flex; gap: 10px;">
+                        <button id="flt-sync-veh-exp" class="btn-outline" title="Export Vehicles to JSON">⬇️ Sync Out</button>
+                        <button id="flt-sync-veh-imp" class="btn-outline" title="Merge Vehicles from JSON">⬆️ Sync In</button>
+                        <button id="add-new-veh-btn" class="btn-primary">+ Add Vehicle</button>
+                    </div>
+                </div>`;
             fleetData.vehicles.forEach(v => {
                 html += `<div class="app-table-container" style="margin-top:15px;"><div style="padding:10px; background:var(--accent-primary); color:white; display:flex; justify-content:space-between; align-items: center;"><strong>${v.id} | ${v.desc}</strong> <button class="btn-outline edit-veh-trigger" data-v="${v.id}" style="color: white; border-color: white; padding: 4px 10px; font-size: 0.8rem;">Edit Vehicle</button></div>
-                <table class="app-table"><thead><tr><th>Task</th><th>Interval</th><th>Time</th></tr></thead><tbody>${v.schedule.map(t => `<tr><td>${t.task}</td><td>${t.interval} ${t.unit}</td><td>${t.timeInterval}</td></tr>`).join('')}</tbody></table></div>`;
+                <table class="app-table"><thead><tr><th>Task</th><th>Interval</th><th>Time</th><th>Info</th></tr></thead><tbody>${v.schedule.map(t => `<tr><td>${t.task}</td><td>${t.interval} ${t.unit}</td><td>${t.timeInterval}</td><td>${t.info || ''}</td></tr>`).join('')}</tbody></table></div>`;
             });
             stage.innerHTML = html;
 
             document.getElementById('add-new-veh-btn').addEventListener('click', () => openVehicleEditor(null));
             document.querySelectorAll('.edit-veh-trigger').forEach(b => b.addEventListener('click', (e) => openVehicleEditor(e.target.getAttribute('data-v'))));
+            
+            // Sync Event Listeners
+            document.getElementById('flt-sync-veh-exp').addEventListener('click', () => {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(fleetData.vehicles, null, 2));
+                const anchor = document.createElement('a'); anchor.setAttribute("href", dataStr);
+                anchor.setAttribute("download", `Fleet_Vehicles_Sync_${getToday()}.json`);
+                document.body.appendChild(anchor); anchor.click(); anchor.remove();
+                NotificationSystem.show("Vehicles Exported", "success");
+            });
+            document.getElementById('flt-sync-veh-imp').addEventListener('click', () => {
+                document.getElementById('fleet-import-veh-file').click();
+            });
         }
         else if (viewName === 'settings') {
             stage.innerHTML = `<h3>Checklist Config</h3><p>Edit items appearing on the Monthly Inspection Form.</p>
-            <textarea id="flt-check-edit" class="app-input" rows="12">${fleetData.settings.checklistItems.join('\n')}</textarea>
+            <textarea id="flt-check-edit" class="app-input" rows="15">${fleetData.settings.checklistItems.join('\n')}</textarea>
             <button id="flt-save-check" class="btn-primary">Save Config</button>`;
             document.getElementById('flt-save-check').addEventListener('click', () => {
                 fleetData.settings.checklistItems = document.getElementById('flt-check-edit').value.split('\n').map(s=>s.trim()).filter(s=>s!=='');
@@ -209,19 +377,24 @@ function initFleetLogic() {
     function renderScheduleEditor() {
         const cont = document.getElementById('edit-v-schedule-container');
         cont.innerHTML = tempSchedule.map((t, idx) => `
-            <div style="display:flex; gap:5px; margin-bottom:5px; background: rgba(0,0,0,0.03); padding: 5px; border-radius: 4px;">
+            <div style="display:flex; gap:5px; margin-bottom:5px; background: rgba(0,0,0,0.03); padding: 5px; border-radius: 4px; align-items: center;">
                 <input type="text" class="app-input s-task" value="${t.task}" placeholder="Task Name" data-idx="${idx}" style="margin:0; flex: 2;">
-                <input type="text" class="app-input s-int" value="${t.interval}" placeholder="e.g. 5000" data-idx="${idx}" style="margin:0; flex: 1;">
-                <input type="text" class="app-input s-unit" value="${t.unit}" placeholder="Miles/Hrs" data-idx="${idx}" style="margin:0; flex: 1;">
-                <input type="text" class="app-input s-time" value="${t.timeInterval}" placeholder="Time" data-idx="${idx}" style="margin:0; flex: 1;">
-                <button type="button" class="btn-danger rem-task-btn" data-idx="${idx}">X</button>
+                <input type="number" class="app-input s-int" value="${t.interval}" placeholder="e.g. 5000" data-idx="${idx}" style="margin:0; flex: 1;">
+                <select class="app-select s-unit" data-idx="${idx}" style="margin:0; flex: 1; padding: 10px;">
+                    <option value="Miles" ${t.unit === 'Miles' ? 'selected' : ''}>Miles</option>
+                    <option value="Hours" ${t.unit === 'Hours' ? 'selected' : ''}>Hours</option>
+                </select>
+                <input type="text" class="app-input s-time" value="${t.timeInterval}" placeholder="Time limit" data-idx="${idx}" style="margin:0; flex: 1;">
+                <input type="text" class="app-input s-info" value="${t.info || ''}" placeholder="Info/Notes" data-idx="${idx}" style="margin:0; flex: 1.5;">
+                <button type="button" class="btn-danger rem-task-btn" data-idx="${idx}" style="padding: 10px;">X</button>
             </div>
         `).join('');
 
         document.querySelectorAll('.s-task').forEach(inp => inp.addEventListener('input', (e) => tempSchedule[e.target.getAttribute('data-idx')].task = e.target.value));
         document.querySelectorAll('.s-int').forEach(inp => inp.addEventListener('input', (e) => tempSchedule[e.target.getAttribute('data-idx')].interval = e.target.value));
-        document.querySelectorAll('.s-unit').forEach(inp => inp.addEventListener('input', (e) => tempSchedule[e.target.getAttribute('data-idx')].unit = e.target.value));
+        document.querySelectorAll('.s-unit').forEach(sel => sel.addEventListener('change', (e) => tempSchedule[e.target.getAttribute('data-idx')].unit = e.target.value));
         document.querySelectorAll('.s-time').forEach(inp => inp.addEventListener('input', (e) => tempSchedule[e.target.getAttribute('data-idx')].timeInterval = e.target.value));
+        document.querySelectorAll('.s-info').forEach(inp => inp.addEventListener('input', (e) => tempSchedule[e.target.getAttribute('data-idx')].info = e.target.value));
         document.querySelectorAll('.rem-task-btn').forEach(b => b.addEventListener('click', (e) => { tempSchedule.splice(e.target.getAttribute('data-idx'), 1); renderScheduleEditor(); }));
     }
 
@@ -243,7 +416,7 @@ function initFleetLogic() {
     }
 
     document.getElementById('close-edit-veh-modal').addEventListener('click', () => editVehModal.close());
-    document.getElementById('edit-v-add-task-btn').addEventListener('click', () => { tempSchedule.push({task: '', interval: '', unit: '', timeInterval: ''}); renderScheduleEditor(); });
+    document.getElementById('edit-v-add-task-btn').addEventListener('click', () => { tempSchedule.push({task: '', interval: '', unit: 'Miles', timeInterval: '', info: ''}); renderScheduleEditor(); });
     
     document.getElementById('fleet-edit-veh-form').addEventListener('submit', (e) => {
         e.preventDefault();
@@ -252,10 +425,8 @@ function initFleetLogic() {
         const newDesc = document.getElementById('edit-v-desc').value;
 
         if(origId && origId !== newId) {
-            // Rename logic
             const v = fleetData.vehicles.find(x => x.id === origId);
             v.id = newId; v.desc = newDesc; v.schedule = tempSchedule;
-            // Update historical logs
             fleetData.inspections.forEach(i => { if(i.vehicleId === origId) i.vehicleId = newId; });
             fleetData.services.forEach(s => { if(s.vehicleId === origId) s.vehicleId = newId; });
         } else if (origId) {
@@ -276,7 +447,7 @@ function initFleetLogic() {
         }
     });
 
-    // --- Repair Modal ---
+    // --- Repair Modal & Form Triggers ---
     const repModal = document.getElementById('fleet-repair-modal');
     document.getElementById('close-repair-modal').addEventListener('click', () => repModal.close());
 
@@ -298,8 +469,18 @@ function initFleetLogic() {
     function triggerFormTab(tab, vId, task = '') {
         document.querySelector(`.fleet-tab[data-target="${tab}"]`).click();
         setTimeout(() => {
-            if(tab === 'inspections') { document.getElementById('flt-insp-form-cont').classList.remove('hidden'); document.getElementById('fi-v').value = vId; }
-            if(tab === 'services') { document.getElementById('flt-srv-form-cont').classList.remove('hidden'); document.getElementById('fs-v').value = vId; document.getElementById('fs-t').value = task; }
+            if(tab === 'inspections') { 
+                document.getElementById('flt-insp-form-cont').classList.remove('hidden'); 
+                document.getElementById('fi-v').value = vId; 
+                document.getElementById('fi-d').value = getToday();
+            }
+            if(tab === 'services') { 
+                document.getElementById('flt-srv-form-cont').classList.remove('hidden'); 
+                document.getElementById('fs-v').value = vId; 
+                updateServiceDatalist(vId);
+                document.getElementById('fs-t').value = task; 
+                document.getElementById('fs-d').value = getToday();
+            }
         }, 50);
     }
 
@@ -334,7 +515,6 @@ function initFleetLogic() {
         sels.forEach(vId => {
             const vData = fleetData.vehicles.find(v => v.id === vId);
             
-            // Blank Form Logic
             if (printBlank) {
                 let blankHtml = `<div style="page-break-after:always; margin-bottom: 20px;"><h2 style="text-align:center; border-bottom:2px solid #000; padding-bottom: 10px;">Monthly Vehicle Inspection</h2>
                 <div style="display:grid; grid-template-columns:1fr 1fr; margin-bottom:15px; font-size:12px;"><div><strong>Vehicle:</strong> ${vId} (${vData?vData.desc:''})</div><div><strong>Date:</strong> ________________</div><div><strong>Inspector:</strong> ________________</div><div><strong>Odometer:</strong> ________________</div></div>
@@ -346,10 +526,9 @@ function initFleetLogic() {
                 }
                 blankHtml += `</tbody></table></div>`;
                 printHtml += blankHtml;
-                return; // Continue to next vehicle
+                return;
             }
 
-            // Normal Data Print Logic
             const insp = fleetData.inspections.filter(i => i.vehicleId === vId).sort((a,b) => new Date(b.date) - new Date(a.date))[0];
             if(!insp) return;
             
