@@ -2,14 +2,25 @@
 
 function initInventoryLogic() {
     let invData = StateManager.getAppData('inventory');
-    if (!invData.items) {
-        invData = { items: [], transactions: [] };
+    
+    if (!invData.items || !invData.categories) {
+        invData = { 
+            items: [], 
+            transactions: [],
+            // Initialize Master Categories list
+            categories: [
+                "General Supplies",
+                "Plumbing",
+                "Electrical",
+                "Camping Gear",
+                "Medical",
+                "Fishing Gear",
+                "Kitchen"
+            ]
+        };
         StateManager.setAppData('inventory', invData);
     }
     const safeSave = () => { StateManager.setAppData('inventory', invData); };
-
-    // Memory variable to route the user back to the audit screen after adding a missing item
-    let pendingAuditSku = null;
 
     // --- Core Logic ---
     const getCurrentQty = (sku) => {
@@ -62,6 +73,23 @@ function initInventoryLogic() {
         });
     });
 
+    // Populate Datalist on App Load so it's ready in the modal
+    populateCategoryDatalist();
+
+    function populateCategoryDatalist() {
+        const dl = document.getElementById('inv-master-categories');
+        if (dl) {
+            dl.innerHTML = '';
+            invData.categories.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                dl.appendChild(option);
+            });
+        }
+    }
+
+    // Smart memory variable for the Audit Scanner
+    let pendingAuditSku = null;
     let html5QrCode = null;
 
     function renderInvView(viewName) {
@@ -74,6 +102,9 @@ function initInventoryLogic() {
                 html5QrCode = null;
             }).catch(err => console.error("Scanner clear failed", err));
         }
+
+        // Populate datalist again when rendering dashboard/transactions to ensure it's fresh
+        if (viewName !== 'reports') populateCategoryDatalist();
 
         if (viewName === 'dashboard') {
             let html = `
@@ -187,7 +218,6 @@ function initInventoryLogic() {
                 const item = invData.items.find(i => i.sku === sku);
                 
                 if (!item) {
-                    // SKU not found! Shut down the camera so it's not running behind modals
                     if (html5QrCode) { 
                         html5QrCode.stop().then(() => {
                             html5QrCode.clear(); 
@@ -198,14 +228,12 @@ function initInventoryLogic() {
                     readerDiv.classList.add('hidden');
                     startBtn.classList.add('hidden');
                     
-                    // Prompt the user to add the missing item
                     DialogSystem.confirm("Barcode Not Found", `The SKU [${sku}] isn't in your master list. Do you want to add it now?`)
                     .then(confirm => {
                         if (confirm) {
                             document.getElementById('new-sku').value = sku;
                             document.getElementById('inv-add-modal').showModal();
                         } else {
-                            // User clicked cancel, reset back to scanner mode
                             document.getElementById('audit-manual-sku').value = '';
                             startBtn.classList.remove('hidden');
                         }
@@ -213,7 +241,6 @@ function initInventoryLogic() {
                     return;
                 }
                 
-                // Normal execution if SKU exists
                 if (html5QrCode) { 
                     html5QrCode.stop().then(() => {
                         html5QrCode.clear(); 
@@ -282,7 +309,6 @@ function initInventoryLogic() {
                 document.getElementById('audit-manual-sku').value = '';
             });
 
-            // If we just added a new item via the popup from the scanner, load it up immediately!
             if (pendingAuditSku) {
                 const skuToLoad = pendingAuditSku;
                 pendingAuditSku = null;
@@ -290,45 +316,131 @@ function initInventoryLogic() {
             }
         }
         else if (viewName === 'reports') {
-            const reorderList = getReorderList();
-            let html = `
+            stage.innerHTML = `
             <div class="inv-split-layout">
                 <div class="app-card">
                     <h3 style="margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Database Management</h3>
-                    <p style="color: var(--text-secondary); margin-bottom: 15px;">Import CSV files to populate the database.</p>
                     
-                    <input type="file" id="csv-import-items" accept=".csv" class="hidden">
-                    <button class="btn-outline" style="width: 100%; margin-bottom: 10px;" onclick="document.getElementById('csv-import-items').click()">📥 Import Master Items CSV</button>
+                    <p style="color: var(--text-secondary); margin-bottom: 10px; font-size: 0.85rem;">Import CSV data to populate specific tables.</p>
+                    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                        <input type="file" id="csv-import-items" accept=".csv" class="hidden">
+                        <button class="btn-outline" style="flex: 1;" onclick="document.getElementById('csv-import-items').click()">📥 Import Items CSV</button>
+                        
+                        <input type="file" id="csv-import-trans" accept=".csv" class="hidden">
+                        <button class="btn-outline" style="flex: 1;" onclick="document.getElementById('csv-import-trans').click()">📥 Import Trans CSV</button>
+                    </div>
+
+                    <h4 style="margin-top: 20px; margin-bottom: 10px;">Full Inventory Sync (JSON)</h4>
+                    <p style="color: var(--text-secondary); margin-bottom: 10px; font-size: 0.85rem;">Export or merge complete inventory state (items, categories, and transactions) to sync across devices.</p>
                     
-                    <input type="file" id="csv-import-trans" accept=".csv" class="hidden">
-                    <button class="btn-outline" style="width: 100%; margin-bottom: 10px;" onclick="document.getElementById('csv-import-trans').click()">📥 Import Transactions CSV</button>
+                    <button id="export-inv-json-btn" class="btn-primary" style="width: 100%; margin-bottom: 10px;">⬇️ Export Inventory Sync File (.json)</button>
+                    
+                    <input type="file" id="import-inv-json-file" accept=".json" class="hidden">
+                    <button class="btn-outline" style="width: 100%; margin-bottom: 10px; border-color: var(--accent-primary); color: var(--accent-primary);" onclick="document.getElementById('import-inv-json-file').click()">🔄 Merge Sync File (.json)</button>
                     
                     <hr style="margin: 20px 0;">
-                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 10px;">Note: Full JSON Backups and Wipes are handled in the Global Settings (Gear Icon top right).</p>
+                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 10px;">Note: Full Global App Backups are handled in the System Settings (Gear Icon top right).</p>
+                </div>
+                
+                <div class="app-card inv-no-print">
+                    <h3 style="margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Category Manager</h3>
+                    <p style="color: var(--text-secondary); margin-bottom: 15px;">Add or soft-delete categories in the master list. Soft-deleted categories won't appear in the dropdown but existing items are unaffected.</p>
+                    
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                        <input type="text" id="new-master-cat" class="app-input" placeholder="New category name..." style="flex: 2; margin-bottom: 0;">
+                        <button id="add-master-cat" class="btn-primary" style="flex: 1;">+ Add to Master</button>
+                    </div>
+                    
+                    <div class="app-table-container" style="max-height: 250px; overflow-y: auto;">
+                        <table class="app-table">
+                            <thead><tr><th>Active Master Categories</th><th style="width: 50px; text-align: center;">⚙️</th></tr></thead>
+                            <tbody>
+                                ${invData.categories.map((cat, index) => `
+                                    <tr>
+                                        <td>${cat}</td>
+                                        <td style="text-align: center;">
+                                            <button class="btn-danger delete-master-cat" data-index="${index}" style="padding: 2px 6px; font-size: 0.8rem;">X</button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
-                <div class="app-card inv-print-only">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <h3 style="margin: 0;">Reorder List</h3>
-                        <button id="inv-print-btn" class="btn-primary inv-no-print">🖨️ Print List</button>
-                    </div>
-                    <div class="app-table-container">
-                        <table class="app-table">
-                            <thead><tr><th>SKU</th><th>Item Name</th><th>Qty to Order</th></tr></thead>
-                            <tbody>`;
-            
-            if (reorderList.length === 0) { html += `<tr><td colspan="3" style="text-align:center;">All stock levels are optimal!</td></tr>`; }
-            else {
-                reorderList.forEach(item => {
-                    html += `<tr><td>${item.sku}</td><td>${item.itemName}</td><td><strong style="color: var(--danger-color);">${item.qtyToOrder}</strong></td></tr>`;
-                });
-            }
-            html += `</tbody></table></div></div></div>`;
-            stage.innerHTML = html;
+                <div class="app-card inv-no-print" style="background: rgba(0,0,0,0.02); border-color: rgba(255,255,255,0.05);">
+                    <h3 style="margin-bottom: 15px;">Interactive Report Generator</h3>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">To define date ranges and print the yearly usage report, please find the interactive tool dynamically generated *below this application* in the visual tutor interface.</p>
+                </div>
+            </div>`;
 
-            document.getElementById('inv-print-btn').addEventListener('click', () => window.print());
+            // JSON Export/Import Integrations
+            document.getElementById('export-inv-json-btn').addEventListener('click', () => {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(invData, null, 2));
+                const anchor = document.createElement('a');
+                anchor.setAttribute("href", dataStr); 
+                anchor.setAttribute("download", `PMH_Inventory_Sync_${new Date().toISOString().split('T')[0]}.json`);
+                document.body.appendChild(anchor); 
+                anchor.click(); 
+                anchor.remove();
+                NotificationSystem.show('Inventory Sync File Exported', 'success');
+            });
 
-            // PapaParse Integrations
+            // --- The Updated JSON Merge Logic ---
+            document.getElementById('import-inv-json-file').addEventListener('change', (e) => {
+                if(e.target.files.length > 0) {
+                    DialogSystem.confirm("Merge Inventory Data?", "This will sync the uploaded file with your current data. It updates existing items, adds new items, and merges transaction logs without creating duplicates. Proceed?")
+                    .then(confirm => {
+                        if (confirm) {
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                                try {
+                                    const importedData = JSON.parse(event.target.result);
+                                    if (!importedData.items || !importedData.transactions || !importedData.categories) {
+                                        throw new Error("Invalid inventory sync format.");
+                                    }
+
+                                    // 1. Merge Categories
+                                    importedData.categories.forEach(cat => {
+                                        if (!invData.categories.includes(cat)) {
+                                            invData.categories.push(cat);
+                                        }
+                                    });
+
+                                    // 2. Merge Items (Update existing SKUs, add new ones)
+                                    importedData.items.forEach(importedItem => {
+                                        const existingIndex = invData.items.findIndex(i => i.sku === importedItem.sku);
+                                        if (existingIndex > -1) {
+                                            // Overwrite local item details with imported details
+                                            invData.items[existingIndex] = { ...invData.items[existingIndex], ...importedItem };
+                                        } else {
+                                            // Completely new item
+                                            invData.items.push(importedItem);
+                                        }
+                                    });
+
+                                    // 3. Merge Transactions (Only add if UUID doesn't already exist locally)
+                                    importedData.transactions.forEach(importedTx => {
+                                        if (!invData.transactions.some(t => t.id === importedTx.id)) {
+                                            invData.transactions.push(importedTx);
+                                        }
+                                    });
+
+                                    safeSave();
+                                    NotificationSystem.show('Inventory Data Merged Successfully', 'success');
+                                    renderInvView('reports'); // Rerender to show new data
+                                } catch (err) { 
+                                    NotificationSystem.show('Import Failed: Invalid JSON file', 'error'); 
+                                }
+                            }; 
+                            reader.readAsText(e.target.files[0]);
+                        }
+                        e.target.value = ''; // Reset the input so they can upload the same file again if they cancel
+                    });
+                }
+            });
+
+            // PapaParse Integrations (CSV)
             document.getElementById('csv-import-items').addEventListener('change', (e) => {
                 if(e.target.files.length > 0) {
                     Papa.parse(e.target.files[0], { header: true, skipEmptyLines: true, complete: function(results) {
@@ -354,10 +466,37 @@ function initInventoryLogic() {
                     }});
                 }
             });
+
+            // --- Logic for Category Manager ---
+            document.getElementById('add-master-cat').addEventListener('click', () => {
+                const name = document.getElementById('new-master-cat').value.trim();
+                if (name && !invData.categories.includes(name)) {
+                    invData.categories.push(name);
+                    safeSave();
+                    NotificationSystem.show(`'${name}' added to master list.`, 'success');
+                    renderInvView('reports'); // Rerender to refresh table
+                } else if (name) {
+                    NotificationSystem.show(`Category '${name}' already exists.`, 'error');
+                }
+            });
+
+            document.querySelectorAll('.delete-master-cat').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const index = parseInt(e.target.getAttribute('data-index'));
+                    DialogSystem.confirm("Confirm Soft-Delete", `Are you sure you want to remove '${invData.categories[index]}' from the master list? Existing items will keep this category staticly, but it won't appear in the 'Add Item' dropdown.`)
+                    .then(confirm => {
+                        if (confirm) {
+                            invData.categories.splice(index, 1);
+                            safeSave();
+                            renderInvView('reports');
+                        }
+                    });
+                });
+            });
         }
     }
 
-    // --- Add Manual Item Modal ---
+    // --- Manual Item Modal and 'Smart Routing' in Audit ---
     const addModal = document.getElementById('inv-add-modal');
     document.getElementById('inv-add-item-btn').addEventListener('click', () => addModal.showModal());
     document.getElementById('close-inv-add').addEventListener('click', () => addModal.close());
@@ -375,15 +514,15 @@ function initInventoryLogic() {
         safeSave(); 
         e.target.reset(); 
         addModal.close(); 
-        NotificationSystem.show('Item Added', 'success');
+        NotificationSystem.show('Item Added to Master List', 'success');
         
-        // Smart routing: If we were on the audit tab, instantly reload it with the new SKU
+        // --- SMART ROUTING logic ---
         const activeTab = document.querySelector('.inv-tab.btn-primary').getAttribute('data-target');
         if (activeTab === 'audit') {
             pendingAuditSku = sku;
-            renderInvView('audit');
+            renderInvView('audit'); // Rerender Audit tab to trigger loading new SKU
         } else {
-            renderInvView(activeTab);
+            renderInvView(activeTab); // Just rerender active tab to refresh lists
         }
     });
 
