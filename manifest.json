@@ -1,6 +1,6 @@
 {
-  "name": "Omni Utility Hub",
-  "short_name": "OmniHub",
+  "name": "Park Management Hub",
+  "short_name": "PMH",
   "description": "Unified offline-first management suite for Inventory, Fleet, and Operations.",
   "start_url": "./index.html",
   "display": "standalone",
