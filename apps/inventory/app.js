@@ -7,6 +7,7 @@ function initInventoryLogic() {
         invData = { 
             items: [], 
             transactions: [],
+            // Initialize Master Categories list
             categories: [
                 "General Supplies",
                 "Plumbing",
@@ -28,7 +29,7 @@ function initInventoryLogic() {
         itemTrans.forEach(t => {
             if (t.type === 'Stock In') qty += parseFloat(t.quantity);
             else if (t.type === 'Stock Out') qty -= parseFloat(t.quantity);
-            else if (t.type === 'Audit Correction') qty = parseFloat(t.quantity); 
+            else if (t.type === 'Audit Correction') qty = parseFloat(t.quantity); // Kept so past audits don't break
         });
         return qty;
     };
@@ -72,6 +73,7 @@ function initInventoryLogic() {
         });
     });
 
+    // Populate Datalist on App Load so it's ready in the modal
     populateCategoryDatalist();
 
     function populateCategoryDatalist() {
@@ -86,12 +88,14 @@ function initInventoryLogic() {
         }
     }
 
+    // Smart memory variable for the Audit Scanner
     let pendingAuditSku = null;
     let html5QrCode = null;
 
     function renderInvView(viewName) {
         stage.innerHTML = '';
         
+        // Clean up scanner camera if we leave the audit tab
         if (viewName !== 'audit' && html5QrCode) {
             html5QrCode.stop().then(() => {
                 html5QrCode.clear();
@@ -99,6 +103,7 @@ function initInventoryLogic() {
             }).catch(err => console.error("Scanner clear failed", err));
         }
 
+        // Populate datalist again when rendering dashboard/transactions to ensure it's fresh
         if (viewName !== 'reports') populateCategoryDatalist();
 
         if (viewName === 'dashboard') {
@@ -213,6 +218,7 @@ function initInventoryLogic() {
                 const item = invData.items.find(i => i.sku === sku);
                 
                 if (!item) {
+                    // SKU not found! Shut down the camera so it's not running behind modals
                     if (html5QrCode) { 
                         html5QrCode.stop().then(() => {
                             html5QrCode.clear(); 
@@ -223,12 +229,14 @@ function initInventoryLogic() {
                     readerDiv.classList.add('hidden');
                     startBtn.classList.add('hidden');
                     
+                    // Prompt the user to add the missing item
                     DialogSystem.confirm("Barcode Not Found", `The SKU [${sku}] isn't in your master list. Do you want to add it now?`)
                     .then(confirm => {
                         if (confirm) {
                             document.getElementById('new-sku').value = sku;
                             document.getElementById('inv-add-modal').showModal();
                         } else {
+                            // User clicked cancel, reset back to scanner mode
                             document.getElementById('audit-manual-sku').value = '';
                             startBtn.classList.remove('hidden');
                         }
@@ -236,6 +244,7 @@ function initInventoryLogic() {
                     return;
                 }
                 
+                // Normal execution if SKU exists
                 if (html5QrCode) { 
                     html5QrCode.stop().then(() => {
                         html5QrCode.clear(); 
@@ -290,9 +299,12 @@ function initInventoryLogic() {
                 const sysQty = getCurrentQty(sku);
                 const discrepancy = physical - sysQty;
 
-                if (discrepancy !== 0) {
-                    addTransaction('Audit Correction', sku, physical, `System said ${sysQty}, Physical was ${physical}`);
-                    NotificationSystem.show('Audit Correction Logged', 'success');
+                if (discrepancy > 0) {
+                    addTransaction('Stock In', sku, discrepancy, `Audit scan (System said ${sysQty}, Physical was ${physical})`);
+                    NotificationSystem.show('Audit: Stock In Logged', 'success');
+                } else if (discrepancy < 0) {
+                    addTransaction('Stock Out', sku, Math.abs(discrepancy), `Audit scan (System said ${sysQty}, Physical was ${physical})`);
+                    NotificationSystem.show('Audit: Stock Out Logged', 'success');
                 } else {
                     NotificationSystem.show('Count matches. No change made.', 'success');
                 }
@@ -304,6 +316,7 @@ function initInventoryLogic() {
                 document.getElementById('audit-manual-sku').value = '';
             });
 
+            // If we just added a new item via the popup from the scanner, load it up immediately!
             if (pendingAuditSku) {
                 const skuToLoad = pendingAuditSku;
                 pendingAuditSku = null;
