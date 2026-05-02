@@ -218,7 +218,6 @@ function initInventoryLogic() {
                 const item = invData.items.find(i => i.sku === sku);
                 
                 if (!item) {
-                    // SKU not found! Shut down the camera so it's not running behind modals
                     if (html5QrCode) { 
                         html5QrCode.stop().then(() => {
                             html5QrCode.clear(); 
@@ -229,14 +228,12 @@ function initInventoryLogic() {
                     readerDiv.classList.add('hidden');
                     startBtn.classList.add('hidden');
                     
-                    // Prompt the user to add the missing item
                     DialogSystem.confirm("Barcode Not Found", `The SKU [${sku}] isn't in your master list. Do you want to add it now?`)
                     .then(confirm => {
                         if (confirm) {
                             document.getElementById('new-sku').value = sku;
                             document.getElementById('inv-add-modal').showModal();
                         } else {
-                            // User clicked cancel, reset back to scanner mode
                             document.getElementById('audit-manual-sku').value = '';
                             startBtn.classList.remove('hidden');
                         }
@@ -244,7 +241,6 @@ function initInventoryLogic() {
                     return;
                 }
                 
-                // Normal execution if SKU exists
                 if (html5QrCode) { 
                     html5QrCode.stop().then(() => {
                         html5QrCode.clear(); 
@@ -316,7 +312,6 @@ function initInventoryLogic() {
                 document.getElementById('audit-manual-sku').value = '';
             });
 
-            // If we just added a new item via the popup from the scanner, load it up immediately!
             if (pendingAuditSku) {
                 const skuToLoad = pendingAuditSku;
                 pendingAuditSku = null;
@@ -335,8 +330,8 @@ function initInventoryLogic() {
             <div class="inv-split-layout">
                 
                 <div class="app-card inv-no-print" style="border-left: 4px solid var(--accent-primary);">
-                    <h3 style="margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Yearly Usage Report Generator</h3>
-                    <p style="color: var(--text-secondary); margin-bottom: 15px;">Define a date range to calculate total item usage and restocking history.</p>
+                    <h3 style="margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Yearly Usage & Spend Report</h3>
+                    <p style="color: var(--text-secondary); margin-bottom: 15px;">Define a date range to calculate total item usage and financial restocking cost.</p>
                     
                     <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px; align-items: flex-end;">
                         <div style="flex: 1; min-width: 150px;">
@@ -402,7 +397,7 @@ function initInventoryLogic() {
                 </div>
             </div>`;
 
-            // --- Report Generator Logic ---
+            // --- Updated Report Generator Logic with Spend and Metrics ---
             document.getElementById('generate-report-btn').addEventListener('click', () => {
                 const startStr = document.getElementById('report-start').value;
                 const endStr = document.getElementById('report-end').value;
@@ -413,10 +408,17 @@ function initInventoryLogic() {
                 const endDate = new Date(endStr);
                 endDate.setHours(23, 59, 59, 999); // Push end date to the very end of the day
 
-                // Build mapping object
+                // Build mapping object including category, stock, and spend
                 const usageStats = {};
                 invData.items.forEach(i => {
-                    usageStats[i.sku] = { name: i.name, added: 0, used: 0 };
+                    usageStats[i.sku] = { 
+                        name: i.name, 
+                        category: i.category || 'Uncategorized',
+                        currentQty: getCurrentQty(i.sku), // Highly useful for reference
+                        added: 0, 
+                        used: 0,
+                        totalSpend: 0 
+                    };
                 });
 
                 // Tally transactions within date range
@@ -424,37 +426,73 @@ function initInventoryLogic() {
                     const tDate = new Date(t.date);
                     if (tDate >= startDate && tDate <= endDate && usageStats[t.sku]) {
                         const qty = parseFloat(t.quantity);
-                        if (t.type === 'Stock In') usageStats[t.sku].added += qty;
-                        if (t.type === 'Stock Out') usageStats[t.sku].used += qty;
-                        // Note: Audit Corrections are skipped here because they reflect a static count, not active usage.
+                        
+                        if (t.type === 'Stock In') {
+                            usageStats[t.sku].added += qty;
+                            // Calculate spend based on the actualUnitCost saved at the time of the transaction.
+                            // If missing, fallback to current master item cost to prevent NaNs
+                            const cost = t.actualUnitCost || invData.items.find(i => i.sku === t.sku)?.unitCost || 0;
+                            usageStats[t.sku].totalSpend += (qty * cost);
+                        }
+                        if (t.type === 'Stock Out') {
+                            usageStats[t.sku].used += qty;
+                        }
                     }
                 });
 
                 let tableHtml = `
                 <table class="app-table">
-                    <thead><tr><th>SKU</th><th>Item Name</th><th style="text-align: center;">Stock Added (+)</th><th style="text-align: center;">Stock Used (-)</th></tr></thead>
+                    <thead>
+                        <tr>
+                            <th>SKU</th>
+                            <th>Item Name</th>
+                            <th>Category</th>
+                            <th style="text-align: center;">Used (-)</th>
+                            <th style="text-align: center;">Added (+)</th>
+                            <th style="text-align: right;">Total Spend</th>
+                            <th style="text-align: center;">Current Stock</th>
+                        </tr>
+                    </thead>
                     <tbody>
                 `;
                 
                 let hasData = false;
+                let grandTotalSpend = 0;
+
                 for (const sku in usageStats) {
                     if (usageStats[sku].added > 0 || usageStats[sku].used > 0) {
                         hasData = true;
+                        grandTotalSpend += usageStats[sku].totalSpend;
+                        
                         tableHtml += `
                             <tr>
                                 <td><strong>${sku}</strong></td>
                                 <td>${usageStats[sku].name}</td>
-                                <td style="color: var(--accent-primary); font-weight: bold; text-align: center;">${usageStats[sku].added > 0 ? '+' + usageStats[sku].added : 0}</td>
+                                <td style="font-size: 0.85rem; color: var(--text-secondary);">${usageStats[sku].category}</td>
                                 <td style="color: var(--danger-color); font-weight: bold; text-align: center;">${usageStats[sku].used > 0 ? '-' + usageStats[sku].used : 0}</td>
+                                <td style="color: var(--accent-primary); font-weight: bold; text-align: center;">${usageStats[sku].added > 0 ? '+' + usageStats[sku].added : 0}</td>
+                                <td style="text-align: right;">$${usageStats[sku].totalSpend.toFixed(2)}</td>
+                                <td style="text-align: center; font-weight: bold;">${usageStats[sku].currentQty}</td>
                             </tr>
                         `;
                     }
                 }
 
                 if (!hasData) {
-                    tableHtml += `<tr><td colspan="4" style="text-align: center;">No inventory activity found in this date range.</td></tr>`;
+                    tableHtml += `<tr><td colspan="7" style="text-align: center;">No inventory activity found in this date range.</td></tr>`;
                 }
-                tableHtml += `</tbody></table>`;
+                
+                // Add the Grand Total row to the bottom
+                tableHtml += `
+                    </tbody>
+                    <tfoot>
+                        <tr style="background-color: rgba(0,0,0,0.05); border-top: 2px solid var(--border-color);">
+                            <td colspan="5" style="text-align: right; font-weight: bold; font-size: 1.1rem;">Grand Total Spend:</td>
+                            <td style="text-align: right; font-weight: bold; color: var(--danger-color); font-size: 1.1rem;">$${grandTotalSpend.toFixed(2)}</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>`;
 
                 const resultsContainer = document.getElementById('report-results-container');
                 resultsContainer.innerHTML = tableHtml;
@@ -471,7 +509,7 @@ function initInventoryLogic() {
                 const printStage = document.getElementById('inv-print-stage');
                 printStage.innerHTML = `
                     <div style="margin-bottom: 20px; border-bottom: 2px solid black; padding-bottom: 10px;">
-                        <h2 style="margin-bottom: 5px;">Inventory Usage Report</h2>
+                        <h2 style="margin-bottom: 5px;">Inventory Usage & Spend Report</h2>
                         <p style="font-size: 1.1rem;"><strong>Date Range:</strong> ${start} to ${end}</p>
                     </div>
                     ${tableHtml}
