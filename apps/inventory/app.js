@@ -7,7 +7,6 @@ function initInventoryLogic() {
         invData = { 
             items: [], 
             transactions: [],
-            // Initialize Master Categories list
             categories: [
                 "General Supplies",
                 "Plumbing",
@@ -29,7 +28,7 @@ function initInventoryLogic() {
         itemTrans.forEach(t => {
             if (t.type === 'Stock In') qty += parseFloat(t.quantity);
             else if (t.type === 'Stock Out') qty -= parseFloat(t.quantity);
-            else if (t.type === 'Audit Correction') qty = parseFloat(t.quantity); // Overrides math to match count
+            else if (t.type === 'Audit Correction') qty = parseFloat(t.quantity); 
         });
         return qty;
     };
@@ -73,7 +72,6 @@ function initInventoryLogic() {
         });
     });
 
-    // Populate Datalist on App Load so it's ready in the modal
     populateCategoryDatalist();
 
     function populateCategoryDatalist() {
@@ -88,14 +86,12 @@ function initInventoryLogic() {
         }
     }
 
-    // Smart memory variable for the Audit Scanner
     let pendingAuditSku = null;
     let html5QrCode = null;
 
     function renderInvView(viewName) {
         stage.innerHTML = '';
         
-        // Clean up scanner camera if we leave the audit tab
         if (viewName !== 'audit' && html5QrCode) {
             html5QrCode.stop().then(() => {
                 html5QrCode.clear();
@@ -103,7 +99,6 @@ function initInventoryLogic() {
             }).catch(err => console.error("Scanner clear failed", err));
         }
 
-        // Populate datalist again when rendering dashboard/transactions to ensure it's fresh
         if (viewName !== 'reports') populateCategoryDatalist();
 
         if (viewName === 'dashboard') {
@@ -316,18 +311,46 @@ function initInventoryLogic() {
             }
         }
         else if (viewName === 'reports') {
+            
+            // Calculate defaults for Date Pickers
+            const todayStr = new Date().toISOString().split('T')[0];
+            const lastYear = new Date();
+            lastYear.setFullYear(lastYear.getFullYear() - 1);
+            const lastYearStr = lastYear.toISOString().split('T')[0];
+
             stage.innerHTML = `
             <div class="inv-split-layout">
-                <div class="app-card">
-                    <h3 style="margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Database Management</h3>
+                
+                <div class="app-card inv-no-print" style="border-left: 4px solid var(--accent-primary);">
+                    <h3 style="margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Yearly Usage Report Generator</h3>
+                    <p style="color: var(--text-secondary); margin-bottom: 15px;">Define a date range to calculate total item usage and restocking history.</p>
                     
-                    <p style="color: var(--text-secondary); margin-bottom: 10px; font-size: 0.85rem;">Import CSV data to populate specific tables.</p>
-                    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px; align-items: flex-end;">
+                        <div style="flex: 1; min-width: 150px;">
+                            <label style="font-weight: bold; font-size: 0.9rem;">Start Date</label>
+                            <input type="date" id="report-start" class="app-input" value="${lastYearStr}" style="margin-bottom: 0;">
+                        </div>
+                        <div style="flex: 1; min-width: 150px;">
+                            <label style="font-weight: bold; font-size: 0.9rem;">End Date</label>
+                            <input type="date" id="report-end" class="app-input" value="${todayStr}" style="margin-bottom: 0;">
+                        </div>
+                        <button id="generate-report-btn" class="btn-primary" style="flex: 1; min-width: 150px; padding: 11px;">📊 Generate Report</button>
+                        <button id="print-report-btn" class="btn-outline hidden" style="flex: 1; min-width: 150px; padding: 11px;">🖨️ Print Report</button>
+                    </div>
+                    
+                    <div id="report-results-container" class="app-table-container hidden" style="margin-top: 20px; max-height: 400px; overflow-y: auto;">
+                        </div>
+                </div>
+
+                <div class="app-card inv-no-print">
+                    <h3 style="margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Database Sync & Backup</h3>
+                    
+                    <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
                         <input type="file" id="csv-import-items" accept=".csv" class="hidden">
-                        <button class="btn-outline" style="flex: 1;" onclick="document.getElementById('csv-import-items').click()">📥 Import Items CSV</button>
+                        <button class="btn-outline" style="flex: 1; min-width: 200px;" onclick="document.getElementById('csv-import-items').click()">📥 Import Items (CSV)</button>
                         
                         <input type="file" id="csv-import-trans" accept=".csv" class="hidden">
-                        <button class="btn-outline" style="flex: 1;" onclick="document.getElementById('csv-import-trans').click()">📥 Import Trans CSV</button>
+                        <button class="btn-outline" style="flex: 1; min-width: 200px;" onclick="document.getElementById('csv-import-trans').click()">📥 Import Trans (CSV)</button>
                     </div>
 
                     <h4 style="margin-top: 20px; margin-bottom: 10px;">Full Inventory Sync (JSON)</h4>
@@ -337,18 +360,15 @@ function initInventoryLogic() {
                     
                     <input type="file" id="import-inv-json-file" accept=".json" class="hidden">
                     <button class="btn-outline" style="width: 100%; margin-bottom: 10px; border-color: var(--accent-primary); color: var(--accent-primary);" onclick="document.getElementById('import-inv-json-file').click()">🔄 Merge Sync File (.json)</button>
-                    
-                    <hr style="margin: 20px 0;">
-                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 10px;">Note: Full Global App Backups are handled in the System Settings (Gear Icon top right).</p>
                 </div>
                 
                 <div class="app-card inv-no-print">
                     <h3 style="margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Category Manager</h3>
                     <p style="color: var(--text-secondary); margin-bottom: 15px;">Add or soft-delete categories in the master list. Soft-deleted categories won't appear in the dropdown but existing items are unaffected.</p>
                     
-                    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                        <input type="text" id="new-master-cat" class="app-input" placeholder="New category name..." style="flex: 2; margin-bottom: 0;">
-                        <button id="add-master-cat" class="btn-primary" style="flex: 1;">+ Add to Master</button>
+                    <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
+                        <input type="text" id="new-master-cat" class="app-input" placeholder="New category name..." style="flex: 2; min-width: 200px; margin-bottom: 0;">
+                        <button id="add-master-cat" class="btn-primary" style="flex: 1; min-width: 150px;">+ Add to Master</button>
                     </div>
                     
                     <div class="app-table-container" style="max-height: 250px; overflow-y: auto;">
@@ -367,12 +387,84 @@ function initInventoryLogic() {
                         </table>
                     </div>
                 </div>
-
-                <div class="app-card inv-no-print" style="background: rgba(0,0,0,0.02); border-color: rgba(255,255,255,0.05);">
-                    <h3 style="margin-bottom: 15px;">Interactive Report Generator</h3>
-                    <p style="color: var(--text-secondary); font-size: 0.9rem;">To define date ranges and print the yearly usage report, please find the interactive tool dynamically generated *below this application* in the visual tutor interface.</p>
-                </div>
             </div>`;
+
+            // --- Report Generator Logic ---
+            document.getElementById('generate-report-btn').addEventListener('click', () => {
+                const startStr = document.getElementById('report-start').value;
+                const endStr = document.getElementById('report-end').value;
+                
+                if(!startStr || !endStr) return NotificationSystem.show("Please select both dates", "error");
+                
+                const startDate = new Date(startStr);
+                const endDate = new Date(endStr);
+                endDate.setHours(23, 59, 59, 999); // Push end date to the very end of the day
+
+                // Build mapping object
+                const usageStats = {};
+                invData.items.forEach(i => {
+                    usageStats[i.sku] = { name: i.name, added: 0, used: 0 };
+                });
+
+                // Tally transactions within date range
+                invData.transactions.forEach(t => {
+                    const tDate = new Date(t.date);
+                    if (tDate >= startDate && tDate <= endDate && usageStats[t.sku]) {
+                        const qty = parseFloat(t.quantity);
+                        if (t.type === 'Stock In') usageStats[t.sku].added += qty;
+                        if (t.type === 'Stock Out') usageStats[t.sku].used += qty;
+                        // Note: Audit Corrections are skipped here because they reflect a static count, not active usage.
+                    }
+                });
+
+                let tableHtml = `
+                <table class="app-table">
+                    <thead><tr><th>SKU</th><th>Item Name</th><th style="text-align: center;">Stock Added (+)</th><th style="text-align: center;">Stock Used (-)</th></tr></thead>
+                    <tbody>
+                `;
+                
+                let hasData = false;
+                for (const sku in usageStats) {
+                    if (usageStats[sku].added > 0 || usageStats[sku].used > 0) {
+                        hasData = true;
+                        tableHtml += `
+                            <tr>
+                                <td><strong>${sku}</strong></td>
+                                <td>${usageStats[sku].name}</td>
+                                <td style="color: var(--accent-primary); font-weight: bold; text-align: center;">${usageStats[sku].added > 0 ? '+' + usageStats[sku].added : 0}</td>
+                                <td style="color: var(--danger-color); font-weight: bold; text-align: center;">${usageStats[sku].used > 0 ? '-' + usageStats[sku].used : 0}</td>
+                            </tr>
+                        `;
+                    }
+                }
+
+                if (!hasData) {
+                    tableHtml += `<tr><td colspan="4" style="text-align: center;">No inventory activity found in this date range.</td></tr>`;
+                }
+                tableHtml += `</tbody></table>`;
+
+                const resultsContainer = document.getElementById('report-results-container');
+                resultsContainer.innerHTML = tableHtml;
+                resultsContainer.classList.remove('hidden');
+                document.getElementById('print-report-btn').classList.remove('hidden');
+            });
+
+            // --- Report Print Logic ---
+            document.getElementById('print-report-btn').addEventListener('click', () => {
+                const start = document.getElementById('report-start').value;
+                const end = document.getElementById('report-end').value;
+                const tableHtml = document.getElementById('report-results-container').innerHTML;
+                
+                const printStage = document.getElementById('inv-print-stage');
+                printStage.innerHTML = `
+                    <div style="margin-bottom: 20px; border-bottom: 2px solid black; padding-bottom: 10px;">
+                        <h2 style="margin-bottom: 5px;">Inventory Usage Report</h2>
+                        <p style="font-size: 1.1rem;"><strong>Date Range:</strong> ${start} to ${end}</p>
+                    </div>
+                    ${tableHtml}
+                `;
+                window.print();
+            });
 
             // JSON Export/Import Integrations
             document.getElementById('export-inv-json-btn').addEventListener('click', () => {
@@ -386,7 +478,6 @@ function initInventoryLogic() {
                 NotificationSystem.show('Inventory Sync File Exported', 'success');
             });
 
-            // --- The Updated JSON Merge Logic ---
             document.getElementById('import-inv-json-file').addEventListener('change', (e) => {
                 if(e.target.files.length > 0) {
                     DialogSystem.confirm("Merge Inventory Data?", "This will sync the uploaded file with your current data. It updates existing items, adds new items, and merges transaction logs without creating duplicates. Proceed?")
@@ -400,26 +491,21 @@ function initInventoryLogic() {
                                         throw new Error("Invalid inventory sync format.");
                                     }
 
-                                    // 1. Merge Categories
                                     importedData.categories.forEach(cat => {
                                         if (!invData.categories.includes(cat)) {
                                             invData.categories.push(cat);
                                         }
                                     });
 
-                                    // 2. Merge Items (Update existing SKUs, add new ones)
                                     importedData.items.forEach(importedItem => {
                                         const existingIndex = invData.items.findIndex(i => i.sku === importedItem.sku);
                                         if (existingIndex > -1) {
-                                            // Overwrite local item details with imported details
                                             invData.items[existingIndex] = { ...invData.items[existingIndex], ...importedItem };
                                         } else {
-                                            // Completely new item
                                             invData.items.push(importedItem);
                                         }
                                     });
 
-                                    // 3. Merge Transactions (Only add if UUID doesn't already exist locally)
                                     importedData.transactions.forEach(importedTx => {
                                         if (!invData.transactions.some(t => t.id === importedTx.id)) {
                                             invData.transactions.push(importedTx);
@@ -428,14 +514,14 @@ function initInventoryLogic() {
 
                                     safeSave();
                                     NotificationSystem.show('Inventory Data Merged Successfully', 'success');
-                                    renderInvView('reports'); // Rerender to show new data
+                                    renderInvView('reports'); 
                                 } catch (err) { 
                                     NotificationSystem.show('Import Failed: Invalid JSON file', 'error'); 
                                 }
                             }; 
                             reader.readAsText(e.target.files[0]);
                         }
-                        e.target.value = ''; // Reset the input so they can upload the same file again if they cancel
+                        e.target.value = ''; 
                     });
                 }
             });
@@ -474,7 +560,7 @@ function initInventoryLogic() {
                     invData.categories.push(name);
                     safeSave();
                     NotificationSystem.show(`'${name}' added to master list.`, 'success');
-                    renderInvView('reports'); // Rerender to refresh table
+                    renderInvView('reports');
                 } else if (name) {
                     NotificationSystem.show(`Category '${name}' already exists.`, 'error');
                 }
@@ -516,13 +602,12 @@ function initInventoryLogic() {
         addModal.close(); 
         NotificationSystem.show('Item Added to Master List', 'success');
         
-        // --- SMART ROUTING logic ---
         const activeTab = document.querySelector('.inv-tab.btn-primary').getAttribute('data-target');
         if (activeTab === 'audit') {
             pendingAuditSku = sku;
-            renderInvView('audit'); // Rerender Audit tab to trigger loading new SKU
+            renderInvView('audit'); 
         } else {
-            renderInvView(activeTab); // Just rerender active tab to refresh lists
+            renderInvView(activeTab); 
         }
     });
 

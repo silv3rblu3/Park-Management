@@ -6,11 +6,14 @@ function renderInventoryApp() {
         /* App-Specific Styling */
         #inv-wrapper { max-width: 1200px; margin: 0 auto; }
         #inv-stage { margin-top: 20px; }
+        
+        /* Removed the forced grid layout for a mobile-friendly flex column */
         .inv-split-layout { display: flex; flex-direction: column; gap: 20px; }
         
-        /* Functional States - styled by downstream agent */
-        .inv-row-danger { /* Highlight when stock <= 0 */ }
-        .inv-row-warning { /* Highlight when stock <= reorderLevel */ }
+        /* Functional States */
+        .inv-row-danger { background-color: rgba(231, 76, 60, 0.1) !important; }
+        .inv-row-warning { background-color: rgba(243, 156, 18, 0.1) !important; }
+        
         .inv-print-only { display: none !important; }
         .inv-no-print { display: block; }
         
@@ -25,14 +28,21 @@ function renderInventoryApp() {
     </style>
 
     <div id="inv-wrapper" class="inv-no-print">
-        <div class="app-toolbar" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <div class="inv-tab-container" style="display: flex; gap: 10px;">
-                <button class="inv-tab btn-primary" data-target="dashboard">📦 Dashboard</button>
-                <button class="inv-tab btn-outline" data-target="transactions">📝 Transactions</button>
-                <button class="inv-tab btn-outline" data-target="audit">🔍 Audit Scanner</button>
-                <button class="inv-tab btn-outline" data-target="reports">📊 Reports & Data</button>
+        
+        <div class="app-toolbar inv-no-print" style="display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px;">
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <h2 style="color: var(--accent-primary); margin: 0;">📦 Inventory Manager</h2>
+                <button id="inv-add-item-btn" class="btn-primary">+ Add New Item</button>
             </div>
-            <button id="inv-add-item-btn" class="btn-primary">+ Add New Item</button>
+            
+            <div class="inv-tab-container" style="display: flex; gap: 10px; flex-wrap: wrap; width: 100%;">
+                <button class="inv-tab btn-primary" data-target="dashboard" style="flex: 1; min-width: 130px;">📦 Dashboard</button>
+                <button class="inv-tab btn-outline" data-target="transactions" style="flex: 1; min-width: 130px;">📝 Transactions</button>
+                <button class="inv-tab btn-outline" data-target="audit" style="flex: 1; min-width: 130px;">🔍 Audit Scanner</button>
+                <button class="inv-tab btn-outline" data-target="reports" style="flex: 1; min-width: 130px;">📊 Reports & Data</button>
+            </div>
+            
         </div>
 
         <div id="inv-stage">
@@ -49,8 +59,7 @@ function renderInventoryApp() {
                 
                 <label>Category (Dropdown/Editable)</label>
                 <input type="text" id="new-cat" class="app-input" list="inv-master-categories" placeholder="e.g., General Supplies">
-                <datalist id="inv-master-categories">
-                    </datalist>
+                <datalist id="inv-master-categories"></datalist>
                 <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: -10px; margin-bottom: 10px;">To manage the master list, go to the 'Reports & Data' tab.</p>
 
                 <label>Storage Location</label><input type="text" id="new-loc" class="app-input" placeholder="e.g., Shed A, Bin 3">
