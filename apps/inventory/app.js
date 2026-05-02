@@ -8,7 +8,10 @@ function initInventoryLogic() {
     }
     const safeSave = () => { StateManager.setAppData('inventory', invData); };
 
-    // --- Core Logic (from your logic.js) ---
+    // Memory variable to route the user back to the audit screen after adding a missing item
+    let pendingAuditSku = null;
+
+    // --- Core Logic ---
     const getCurrentQty = (sku) => {
         let qty = 0;
         const itemTrans = invData.transactions.filter(t => t.sku === sku);
@@ -59,7 +62,6 @@ function initInventoryLogic() {
         });
     });
 
-    // We are using the direct class now instead of the UI wrapper
     let html5QrCode = null;
 
     function renderInvView(viewName) {
@@ -183,9 +185,35 @@ function initInventoryLogic() {
 
             const loadAuditItem = (sku) => {
                 const item = invData.items.find(i => i.sku === sku);
-                if (!item) return NotificationSystem.show("SKU not found in Master List", "error");
                 
-                // If scanner is running, shut it down before showing the form
+                if (!item) {
+                    // SKU not found! Shut down the camera so it's not running behind modals
+                    if (html5QrCode) { 
+                        html5QrCode.stop().then(() => {
+                            html5QrCode.clear(); 
+                            html5QrCode = null;
+                        }).catch(err => console.log(err)); 
+                        startBtn.style.display = 'block'; 
+                    }
+                    readerDiv.classList.add('hidden');
+                    startBtn.classList.add('hidden');
+                    
+                    // Prompt the user to add the missing item
+                    DialogSystem.confirm("Barcode Not Found", `The SKU [${sku}] isn't in your master list. Do you want to add it now?`)
+                    .then(confirm => {
+                        if (confirm) {
+                            document.getElementById('new-sku').value = sku;
+                            document.getElementById('inv-add-modal').showModal();
+                        } else {
+                            // User clicked cancel, reset back to scanner mode
+                            document.getElementById('audit-manual-sku').value = '';
+                            startBtn.classList.remove('hidden');
+                        }
+                    });
+                    return;
+                }
+                
+                // Normal execution if SKU exists
                 if (html5QrCode) { 
                     html5QrCode.stop().then(() => {
                         html5QrCode.clear(); 
@@ -213,23 +241,15 @@ function initInventoryLogic() {
                 readerDiv.classList.remove('hidden');
                 
                 html5QrCode = new Html5Qrcode("reader");
-                
-                // This explicitly requests the rear-facing camera
                 html5QrCode.start(
                     { facingMode: "environment" }, 
                     { fps: 10, qrbox: { width: 250, height: 250 } },
-                    (decodedText) => { 
-                        // On successful scan
-                        loadAuditItem(decodedText.trim().toUpperCase()); 
-                    },
-                    (err) => { 
-                        // Ignore standard frame errors so console isn't flooded
-                    }
+                    (decodedText) => { loadAuditItem(decodedText.trim().toUpperCase()); },
+                    (err) => {} // Ignore frame errors
                 ).catch((err) => {
                     NotificationSystem.show("Camera access denied or rear camera unavailable.", "error");
                     startBtn.style.display = 'block';
                     readerDiv.classList.add('hidden');
-                    console.error("Scanner Error:", err);
                 });
             });
 
@@ -261,6 +281,13 @@ function initInventoryLogic() {
                 startBtn.classList.remove('hidden');
                 document.getElementById('audit-manual-sku').value = '';
             });
+
+            // If we just added a new item via the popup from the scanner, load it up immediately!
+            if (pendingAuditSku) {
+                const skuToLoad = pendingAuditSku;
+                pendingAuditSku = null;
+                setTimeout(() => loadAuditItem(skuToLoad), 100); 
+            }
         }
         else if (viewName === 'reports') {
             const reorderList = getReorderList();
@@ -344,8 +371,20 @@ function initInventoryLogic() {
             sku: sku, name: document.getElementById('new-name').value, category: document.getElementById('new-cat').value, location: document.getElementById('new-loc').value,
             reorderLevel: parseFloat(document.getElementById('new-reorder').value), targetQty: parseFloat(document.getElementById('new-target').value), unitCost: parseFloat(document.getElementById('new-cost').value)
         });
-        safeSave(); e.target.reset(); addModal.close(); NotificationSystem.show('Item Added', 'success');
-        renderInvView(document.querySelector('.inv-tab.btn-primary').getAttribute('data-target'));
+        
+        safeSave(); 
+        e.target.reset(); 
+        addModal.close(); 
+        NotificationSystem.show('Item Added', 'success');
+        
+        // Smart routing: If we were on the audit tab, instantly reload it with the new SKU
+        const activeTab = document.querySelector('.inv-tab.btn-primary').getAttribute('data-target');
+        if (activeTab === 'audit') {
+            pendingAuditSku = sku;
+            renderInvView('audit');
+        } else {
+            renderInvView(activeTab);
+        }
     });
 
     // Boot
