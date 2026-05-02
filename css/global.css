@@ -45,7 +45,15 @@ button { background: none; border: none; cursor: pointer; color: var(--text-prim
 .bento-label { font-size: 0.8rem; font-weight: bold; color: var(--text-secondary); }
 
 /* C. Main Stage */
-#app-container { height: calc(100vh - 60px); overflow-y: auto; padding: 20px; scroll-behavior: smooth; position: relative; }
+#app-container { 
+    height: calc(100vh - 60px); /* Fallback for older browsers */
+    height: calc(100dvh - 60px); /* Dynamic Viewport Height fixes the mobile cutoff issue */
+    overflow-y: auto; 
+    padding: 20px; 
+    padding-bottom: 100px; /* Heavy bottom padding ensures you can over-scroll past the lowest button */
+    scroll-behavior: smooth; 
+    position: relative; 
+}
 #app-container::-webkit-scrollbar { width: 8px; }
 #app-container::-webkit-scrollbar-track { background: transparent; }
 #app-container::-webkit-scrollbar-thumb { background-color: var(--border-color); border-radius: 4px; }
