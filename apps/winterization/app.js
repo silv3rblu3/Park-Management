@@ -3,96 +3,109 @@
 function initWinterizationLogic() {
     // 1. Factory Defaults Helper
     const genSites = (start, end) => Array.from({length: end - start + 1}, (_, i) => ({ text: `Site ${i + start}`, media: [], inputs: [] }));
+    const formatArea = (sections) => ({ tools: "", sections: sections });
     
     let wintData = StateManager.getAppData('winterization');
+    let editorBackupData = null; // Used to restore state if the user cancels edits
     
     // Inject massive default blueprint if empty
     if (!wintData.fall || Object.keys(wintData.fall).length === 0) {
         wintData = {
             fall: {
-                "A-Loop": [
+                "A-Loop": formatArea([
                     { category: "Water Shut-Off", tasks: [{text: "A-Loop", media: [], inputs: []}] },
                     { category: "Main Drains", tasks: [{text: "Open Main Drain A", media: [], inputs: []}, {text: "Open Muskie Point (Fish Cleaning)", media: [], inputs: []}, {text: "Close Main Drain A", media: [], inputs: []}, {text: "Close Muskie Point (Fish Cleaning)", media: [], inputs: []}] },
                     { category: "Fish Station", tasks: [{text: "Tear it apart", media: [], inputs: []}, {text: "Tear it apart part 2", media: [], inputs: []}] },
                     { category: "Camp Spickets", columns: ["Open Spickets", "Open Spicket Drains", "Close Spicket Drains"], tasks: [{text: "Site 2", media: [], inputs: []}, {text: "Site 7", media: [], inputs: []}, {text: "Site 13", media: [], inputs: []}, {text: "Site 18", media: [], inputs: []}, {text: "Yurt", media: [], inputs: []}] },
                     { category: "Electrical", tasks: [{text: "A Loop OFF", media: [], inputs: []}] }
-                ],
-                "B-Loop": [
+                ]),
+                "B-Loop": formatArea([
                     { category: "Water Shut-Off", tasks: [{text: "B-C Loop", media: [], inputs: []}] },
                     { category: "Main Drains", tasks: [{text: "Open Main Drain B-C", media: [], inputs: []}, {text: "Open Site 28", media: [], inputs: []}, {text: "Open Cul-de-sac", media: [], inputs: []}, {text: "Open Trail Between B & C", media: [], inputs: []}, {text: "Close Main Drain B-C", media: [], inputs: []}, {text: "Close Site 28", media: [], inputs: []}, {text: "Close Cul-de-sac", media: [], inputs: []}, {text: "Close Trail Between B & C", media: [], inputs: []}] },
                     { category: "Camp Spickets", columns: ["Open Spickets", "Open Spicket Drains", "Close Spicket Drains"], tasks: genSites(23, 46) },
                     { category: "Electrical", tasks: [{text: "B Loop OFF", media: [], inputs: []}] }
-                ],
-                "C-Loop": [
+                ]),
+                "C-Loop": formatArea([
                     { category: "Water Shut-Off", tasks: [{text: "B-C Loop", media: [], inputs: []}] },
                     { category: "Main Drains", tasks: [{text: "Open Main Drains", media: [], inputs: []}, {text: "Open Site 61", media: [], inputs: []}, {text: "Close Main Drains", media: [], inputs: []}, {text: "Close Site 61", media: [], inputs: []}] },
                     { category: "Camp Spickets", columns: ["Open Spickets", "Open Spicket Drains", "Close Spicket Drains"], tasks: genSites(47, 68) },
                     { category: "Electrical", tasks: [{text: "C Loop OFF", media: [], inputs: []}] }
-                ],
-                "Shower House": [
+                ]),
+                "Shower House": formatArea([
                     { category: "WARNING", warningText: "*** FLIP THE BREAKER OFF BEFORE YOU DRAIN THE WATER HEATER!!!! ***", isCritical: true },
                     { category: "Chase", tasks: [{text: "Water Heater Breaker Off", media: [], inputs: []}, {text: "Drained Water Heater", media: [], inputs: []}, {text: "Water Heater Valve Caps(3)", media: [], inputs: []}, {text: "Sloan Valves (6)", media: [], inputs: []}, {text: "Open 6 Chase Spickets", media: [], inputs: []}] },
                     { category: "Male Side", tasks: [{text: "Take Push Buttons Off Sinks", media: [], inputs: []}, {text: "Take Push Buttons Off Showers", media: [], inputs: []}, {text: "Take Shower Heads Off", media: [], inputs: []}, {text: "Open Spicket Under Sinks", media: [], inputs: []}, {text: "Flush Toilets W/ Anti-Freeze", media: [], inputs: []}] },
                     { category: "Female Side", tasks: [{text: "Take Push Buttons Off Sinks", media: [], inputs: []}, {text: "Take Push Buttons Off Showers", media: [], inputs: []}, {text: "Take Shower Heads Off", media: [], inputs: []}, {text: "Open Spicket Under Sinks", media: [], inputs: []}, {text: "Flush Toilets W/ Anti-Freeze", media: [], inputs: []}] },
                     { category: "ADA", tasks: [{text: "Take Push Buttons Off Sinks", media: [], inputs: []}, {text: "Take Push Buttons Off Showers", media: [], inputs: []}, {text: "Take Shower Head Off", media: [], inputs: []}, {text: "Flush Toilet W/ Anti-Freeze", media: [], inputs: []}] },
                     { category: "Outside", tasks: [{text: "Open Outside Spicket", media: [], inputs: []}, {text: "Shut-Off Water Main", media: [], inputs: []}] }
-                ],
-                "P-Point": [
+                ]),
+                "P-Point": formatArea([
                     { category: "Water Shut-Off", tasks: [{text: "P-Point", media: [], inputs: []}] },
                     { category: "Main Drains", tasks: [{text: "Open P-Point Shelter Side", media: [], inputs: []}, {text: "Open P-Point Lake Side", media: [], inputs: []}, {text: "Close P-Point Shelter Side", media: [], inputs: []}, {text: "Close P-Point Lake Side", media: [], inputs: []}] },
                     { category: "Electrical", tasks: [{text: "Electrical OFF", media: [], inputs: []}] }
-                ],
-                "Dump Station": [
+                ]),
+                "Dump Station": formatArea([
                     { category: "Water Shut-Off", tasks: [{text: "Dump Station", media: [], inputs: []}] },
                     { category: "Main Drains", tasks: [{text: "Open Dump Station", media: [], inputs: []}, {text: "Close Dump Station", media: [], inputs: []}] },
                     { category: "Batteries", tasks: [{text: "Take Batteries Out", media: [], inputs: []}] },
                     { category: "Dump Tower", tasks: [{text: "Take Hose Off", media: [], inputs: []}, {text: "Take bottom flex pipe off", media: [], inputs: []}] }
-                ],
-                "Fish Cleaning Station": [
+                ]),
+                "Fish Cleaning Station": formatArea([
                     { category: "Operations", tasks: [{text: "Turn power OFF", media: [], inputs: []}, {text: "Take spray hoses OFF", media: [], inputs: []}] }
-                ]
+                ])
             },
             spring: {
-                "A-Loop": [
+                "A-Loop": formatArea([
                     { category: "Water Open", tasks: [{text: "A-Loop", media: [], inputs: []}] },
                     { category: "Fish Station", tasks: [{text: "Put It Back Together", media: [], inputs: []}, {text: "Put It Together part 2", media: [], inputs: []}] },
                     { category: "Camp Spickets", columns: ["Close Spickets"], tasks: [{text: "Site 2", media: [], inputs: []}, {text: "Site 7", media: [], inputs: []}, {text: "Site 13", media: [], inputs: []}, {text: "Site 18", media: [], inputs: []}, {text: "Yurt", media: [], inputs: []}] },
                     { category: "Electrical", tasks: [{text: "A Loop ON", media: [], inputs: []}] }
-                ],
-                "B-Loop": [
+                ]),
+                "B-Loop": formatArea([
                     { category: "Water Open", tasks: [{text: "B-C Loop", media: [], inputs: []}] },
                     { category: "Camp Spickets", columns: ["Close Spickets"], tasks: genSites(23, 46) },
                     { category: "Electrical", tasks: [{text: "B Loop ON", media: [], inputs: []}] }
-                ],
-                "C-Loop": [
+                ]),
+                "C-Loop": formatArea([
                     { category: "Water Open", tasks: [{text: "B-C Loop", media: [], inputs: []}] },
                     { category: "Camp Spickets", columns: ["Close Spickets"], tasks: genSites(47, 68) },
                     { category: "Electrical", tasks: [{text: "C Loop ON", media: [], inputs: []}] }
-                ],
-                "Shower House": [
+                ]),
+                "Shower House": formatArea([
                     { category: "WARNING", warningText: "*** Make sure that the Water Heater HAS WATER IN IT BEFORE YOU FLIP THE BREAKER ON!!! ***", isCritical: true },
                     { category: "Male Side", tasks: [{text: "Put Push Buttons On Sinks", media: [], inputs: []}, {text: "Put Push Buttons On Showers", media: [], inputs: []}, {text: "Put Shower Heads On", media: [], inputs: []}, {text: "Close Spicket Under Sinks", media: [], inputs: []}] },
                     { category: "Female Side", tasks: [{text: "Put Push Buttons On Sinks", media: [], inputs: []}, {text: "Put Push Buttons On Showers", media: [], inputs: []}, {text: "Put Shower Heads On", media: [], inputs: []}, {text: "Close Spicket Under Sinks", media: [], inputs: []}] },
                     { category: "ADA", tasks: [{text: "Put Push Buttons On Sinks", media: [], inputs: []}, {text: "Put Push Buttons On Showers", media: [], inputs: []}, {text: "Put Shower Heads On", media: [], inputs: []}] },
                     { category: "Chase", tasks: [{text: "Close 6 Chase Spickets", media: [], inputs: []}, {text: "Close Water Heater Drain", media: [], inputs: []}, {text: "Water Heater Valve Caps(3)", media: [], inputs: []}, {text: "Sloan Valves (6)", media: [], inputs: []}, {text: "Water Heater Breaker On***", media: [], inputs: []}] },
                     { category: "Outside", tasks: [{text: "Close Outside Spicket", media: [], inputs: []}, {text: "Open Water Main", media: [], inputs: []}] }
-                ],
-                "P-Point": [
+                ]),
+                "P-Point": formatArea([
                     { category: "Water Open", tasks: [{text: "P-Point", media: [], inputs: []}] },
                     { category: "Electrical", tasks: [{text: "Electrical ON", media: [], inputs: []}] } 
-                ],
-                "Dump Station": [
+                ]),
+                "Dump Station": formatArea([
                     { category: "Water Open", tasks: [{text: "Dump Station", media: [], inputs: []}] },
                     { category: "Batteries", tasks: [{text: "Put batteries back in", media: [], inputs: []}] },
                     { category: "Dump Tower", tasks: [{text: "Put Hose On", media: [], inputs: []}, {text: "Put Bottom Flex Pipe On", media: [], inputs: []}] }
-                ],
-                "Fish Cleaning Station": [
+                ]),
+                "Fish Cleaning Station": formatArea([
                     { category: "Operations", tasks: [{text: "Turn power ON", media: [], inputs: []}, {text: "Put spray hoses ON", media: [], inputs: []}] } 
-                ]
+                ])
             }
         };
         StateManager.setAppData('winterization', wintData);
     }
+
+    // Migration Script: Convert existing arrays into objects with the new tools string.
+    ['fall', 'spring'].forEach(s => {
+        if (wintData[s]) {
+            Object.keys(wintData[s]).forEach(a => {
+                if (Array.isArray(wintData[s][a])) {
+                    wintData[s][a] = { tools: "", sections: wintData[s][a] };
+                }
+            });
+        }
+    });
 
     const safeSave = () => { StateManager.setAppData('winterization', wintData); };
 
@@ -116,10 +129,20 @@ function initWinterizationLogic() {
             innerContent += `<h2 style="margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid black;">${yearPrefix}${season.toUpperCase()} - ${area}</h2>`;
         }
 
-        const seasonData = wintData[season][area] || [];
+        const seasonData = wintData[season][area] || { tools: "", sections: [] };
         const safeArea = area.replace(/'/g, "\\'");
         
-        seasonData.forEach((section, sectionIdx) => {
+        // Render Tools Block if it exists
+        if (seasonData.tools) {
+            innerContent += `
+                <div style="background-color: rgba(0,0,0,0.03); padding: 15px; border-radius: var(--radius-md); border-left: 4px solid var(--accent-primary); margin-bottom: 20px;">
+                    <h4 style="margin-bottom: 5px;">🛠️ Tools & Equipment Needed</h4>
+                    <p style="white-space: pre-wrap; font-size: 0.95rem; margin: 0;">${seasonData.tools}</p>
+                </div>
+            `;
+        }
+        
+        seasonData.sections.forEach((section, sectionIdx) => {
             if (section.category === "WARNING") {
                 innerContent += `<div style="background-color: ${section.isCritical ? '#ffe6e6' : 'var(--warning-color)'}; color: ${section.isCritical ? '#cc0000' : '#000'}; padding: 15px; font-weight: bold; border-left: 5px solid ${section.isCritical ? '#cc0000' : '#000'}; margin-bottom: 20px; border-radius: 4px;">${section.warningText}</div>`;
                 return; 
@@ -201,8 +224,8 @@ function initWinterizationLogic() {
             const t = parseInt(e.target.getAttribute('data-task'));
             const idx = parseInt(e.target.getAttribute('data-idx'));
             
-            if (!wintData[s][a][sec].tasks[t].inputs) wintData[s][a][sec].tasks[t].inputs = [];
-            wintData[s][a][sec].tasks[t].inputs[idx] = e.target.value;
+            if (!wintData[s][a].sections[sec].tasks[t].inputs) wintData[s][a].sections[sec].tasks[t].inputs = [];
+            wintData[s][a].sections[sec].tasks[t].inputs[idx] = e.target.value;
             safeSave();
         }
     });
@@ -262,14 +285,25 @@ function initWinterizationLogic() {
 
     // --- PRINTING ---
     const printModal = document.getElementById('wint-print-modal');
-    document.getElementById('wint-open-print-btn').addEventListener('click', () => {
-        document.getElementById('wint-print-season-label').innerText = currentSeason;
-        document.getElementById('wint-print-year').value = new Date().getFullYear();
-        const container = document.getElementById('wint-print-checkboxes'); container.innerHTML = '';
-        Object.keys(wintData[currentSeason] || {}).forEach(area => {
+    
+    function populatePrintCheckboxes(season) {
+        const container = document.getElementById('wint-print-checkboxes');
+        container.innerHTML = '';
+        Object.keys(wintData[season] || {}).forEach(area => {
             container.innerHTML += `<label style="cursor: pointer;"><input type="checkbox" class="wint-print-cb" value="${area}" checked> ${area}</label>`;
         });
+    }
+
+    document.getElementById('wint-open-print-btn').addEventListener('click', () => {
+        const printSeasonSelect = document.getElementById('wint-print-season-select');
+        printSeasonSelect.value = currentSeason; // Set to the season the user was just looking at
+        document.getElementById('wint-print-year').value = new Date().getFullYear();
+        populatePrintCheckboxes(currentSeason);
         printModal.showModal();
+    });
+
+    document.getElementById('wint-print-season-select').addEventListener('change', (e) => {
+        populatePrintCheckboxes(e.target.value);
     });
 
     document.getElementById('wint-close-print').onclick = () => printModal.close();
@@ -288,41 +322,90 @@ function initWinterizationLogic() {
         const printContainer = document.getElementById('wint-print-container'); 
         printContainer.innerHTML = '';
         const printBlank = document.getElementById('wint-print-blank').checked;
+        const selectedPrintSeason = document.getElementById('wint-print-season-select').value;
         
-        Array.from(cbs).forEach(cb => { printContainer.appendChild(generateAreaDOM(currentSeason, cb.value, true, printBlank)); });
+        Array.from(cbs).forEach(cb => { printContainer.appendChild(generateAreaDOM(selectedPrintSeason, cb.value, true, printBlank)); });
         printModal.close(); 
         setTimeout(() => window.print(), 200); 
     };
 
     // --- EDIT MODE ---
+    const appToolbar = document.getElementById('wint-app-toolbar');
     const viewMode = document.getElementById('wint-view-mode'); 
     const editMode = document.getElementById('wint-edit-mode');
+    const edSeason = document.getElementById('wint-editor-season');
+    const edArea = document.getElementById('wint-editor-area');
     
     document.getElementById('wint-toggle-edit-btn').onclick = () => { 
-        viewMode.classList.add('hidden'); editMode.classList.remove('hidden'); 
-        populateEditorAreaSelect(); renderDataEditor(); 
+        // Take a snapshot of the data before any edits happen
+        editorBackupData = JSON.stringify(wintData);
+        
+        // Hide the main toolbar and the view mode using strict inline styles
+        appToolbar.style.display = 'none';
+        viewMode.style.display = 'none'; 
+        editMode.style.display = 'block'; 
+        
+        edSeason.value = currentSeason; // Default to active season
+        populateEditorAreaSelect(); 
+        
+        // Default to the active area if it exists in this season
+        if (Array.from(edArea.options).some(opt => opt.value === currentArea)) {
+            edArea.value = currentArea;
+        }
+        
+        renderDataEditor(); 
     };
     
     document.getElementById('wint-exit-edit-btn').onclick = () => { 
         saveCurrentEditorState(); 
-        editMode.classList.add('hidden'); viewMode.classList.remove('hidden'); 
+        editorBackupData = null; // Clear backup memory
+        
+        // Bring back the normal UI using strict inline styles
+        editMode.style.display = 'none'; 
+        viewMode.style.display = 'block'; 
+        appToolbar.style.display = 'flex';
+        
         renderAreaTabs(); renderTasks(); 
     };
 
-    const edSeason = document.getElementById('wint-editor-season');
-    const edArea = document.getElementById('wint-editor-area');
-    
+    document.getElementById('wint-cancel-edit-btn').onclick = () => { 
+        // Restore from snapshot to undo any auto-saved additions/deletions
+        if (editorBackupData) {
+            wintData = JSON.parse(editorBackupData);
+            safeSave(); // Force overwrite localStorage with the clean backup
+            editorBackupData = null;
+        }
+        
+        // Bring back the normal UI using strict inline styles
+        editMode.style.display = 'none'; 
+        viewMode.style.display = 'block'; 
+        appToolbar.style.display = 'flex';
+        
+        renderAreaTabs(); renderTasks(); 
+    };
+
     function populateEditorAreaSelect() { 
         edArea.innerHTML = ''; 
         Object.keys(wintData[edSeason.value] || {}).forEach(area => { edArea.innerHTML += `<option value="${area}">${area}</option>`; }); 
     }
     
-    edSeason.addEventListener('change', () => { populateEditorAreaSelect(); renderDataEditor(); }); 
+    edSeason.addEventListener('change', () => { 
+        saveCurrentEditorState();
+        const previousArea = edArea.value; 
+        populateEditorAreaSelect(); 
+        
+        // Retain the previously selected area if switching seasons allows it
+        if (Array.from(edArea.options).some(opt => opt.value === previousArea)) {
+            edArea.value = previousArea;
+        }
+        renderDataEditor(); 
+    }); 
+    
     edArea.addEventListener('change', renderDataEditor);
 
     document.getElementById('wint-add-area-btn').onclick = () => {
         const name = prompt("Enter new area name:");
-        if(name && !wintData[edSeason.value][name]) { wintData[edSeason.value][name] = []; populateEditorAreaSelect(); edArea.value = name; renderDataEditor(); safeSave(); }
+        if(name && !wintData[edSeason.value][name]) { wintData[edSeason.value][name] = { tools: "", sections: [] }; populateEditorAreaSelect(); edArea.value = name; renderDataEditor(); safeSave(); }
     };
     document.getElementById('wint-rename-area-btn').onclick = () => {
         const oldName = edArea.value; const newName = prompt("Rename area to:", oldName);
@@ -338,9 +421,9 @@ function initWinterizationLogic() {
     ['up', 'down'].forEach(dir => {
         document.getElementById(`wint-move-${dir}-btn`).onclick = () => {
             const s = edSeason.value; const a = edArea.value; if(!a) return;
+            saveCurrentEditorState();
             const keys = Object.keys(wintData[s]); const idx = keys.indexOf(a);
             if ((dir === 'up' && idx > 0) || (dir === 'down' && idx < keys.length - 1)) {
-                saveCurrentEditorState();
                 const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
                 [keys[idx], keys[swapIdx]] = [keys[swapIdx], keys[idx]];
                 const newData = {}; keys.forEach(k => newData[k] = wintData[s][k]);
@@ -353,9 +436,24 @@ function initWinterizationLogic() {
     
     function renderDataEditor() {
         const s = edSeason.value; const a = edArea.value; catContainer.innerHTML = ''; if (!wintData[s] || !wintData[s][a]) return;
-        document.getElementById('wint-add-warning-btn').classList.toggle('hidden', wintData[s][a].some(sec => sec.category === "WARNING"));
+        
+        // Render the Tool input box first
+        catContainer.innerHTML = `
+            <div style="margin-bottom: 25px; background: rgba(0,0,0,0.02); border: 1px solid var(--border-color); padding: 15px; border-radius: var(--radius-md);">
+                <label style="font-weight:bold; color: var(--accent-primary); display:block; margin-bottom: 10px;">🛠️ Tools Needed for this Area:</label>
+                <textarea id="wint-editor-tools-input" class="app-input" rows="3" placeholder="List all wrenches, screwdrivers, or specific gear needed here...">${wintData[s][a].tools || ''}</textarea>
+            </div>
+        `;
 
-        wintData[s][a].forEach((section, catIdx) => {
+        // Hard toggle display instead of relying on classList.toggle('hidden')
+        const warningBtn = document.getElementById('wint-add-warning-btn');
+        if (wintData[s][a].sections.some(sec => sec.category === "WARNING")) {
+            warningBtn.style.display = 'none';
+        } else {
+            warningBtn.style.display = 'inline-block';
+        }
+
+        wintData[s][a].sections.forEach((section, catIdx) => {
             const block = document.createElement('div'); block.style = "background: rgba(0,0,0,0.02); border: 1px solid var(--border-color); padding: 15px; margin-bottom: 15px; border-radius: var(--radius-md);";
             
             if (section.category === "WARNING") {
@@ -380,29 +478,34 @@ function initWinterizationLogic() {
     }
 
     document.getElementById('wint-wrapper').addEventListener('click', (e) => {
-        let btn = e.target.closest('.wint-add-task'); if (btn) { saveCurrentEditorState(); wintData[edSeason.value][edArea.value][btn.getAttribute('data-cat')].tasks.push({text: "New Task", media: [], inputs: []}); renderDataEditor(); }
-        btn = e.target.closest('.wint-del-task'); if (btn) { saveCurrentEditorState(); wintData[edSeason.value][edArea.value][btn.getAttribute('data-cat')].tasks.splice(btn.getAttribute('data-task'), 1); renderDataEditor(); }
-        btn = e.target.closest('.wint-add-m'); if (btn) { saveCurrentEditorState(); wintData[edSeason.value][edArea.value][btn.getAttribute('data-cat')].tasks[btn.getAttribute('data-task')].media.push({type: 'image', url: ''}); renderDataEditor(); }
-        btn = e.target.closest('.wint-del-m'); if (btn) { saveCurrentEditorState(); wintData[edSeason.value][edArea.value][btn.getAttribute('data-cat')].tasks[btn.getAttribute('data-task')].media.splice(btn.getAttribute('data-media'), 1); renderDataEditor(); }
-        btn = e.target.closest('.wint-del-cat'); if (btn) { saveCurrentEditorState(); wintData[edSeason.value][edArea.value].splice(btn.getAttribute('data-cat'), 1); renderDataEditor(); }
+        let btn = e.target.closest('.wint-add-task'); if (btn) { saveCurrentEditorState(); wintData[edSeason.value][edArea.value].sections[btn.getAttribute('data-cat')].tasks.push({text: "New Task", media: [], inputs: []}); renderDataEditor(); }
+        btn = e.target.closest('.wint-del-task'); if (btn) { saveCurrentEditorState(); wintData[edSeason.value][edArea.value].sections[btn.getAttribute('data-cat')].tasks.splice(btn.getAttribute('data-task'), 1); renderDataEditor(); }
+        btn = e.target.closest('.wint-add-m'); if (btn) { saveCurrentEditorState(); wintData[edSeason.value][edArea.value].sections[btn.getAttribute('data-cat')].tasks[btn.getAttribute('data-task')].media.push({type: 'image', url: ''}); renderDataEditor(); }
+        btn = e.target.closest('.wint-del-m'); if (btn) { saveCurrentEditorState(); wintData[edSeason.value][edArea.value].sections[btn.getAttribute('data-cat')].tasks[btn.getAttribute('data-task')].media.splice(btn.getAttribute('data-media'), 1); renderDataEditor(); }
+        btn = e.target.closest('.wint-del-cat'); if (btn) { saveCurrentEditorState(); wintData[edSeason.value][edArea.value].sections.splice(btn.getAttribute('data-cat'), 1); renderDataEditor(); }
         btn = e.target.closest('.wint-move-cat'); if (btn) {
-            saveCurrentEditorState(); const arr = wintData[edSeason.value][edArea.value]; const c = parseInt(btn.getAttribute('data-cat'));
+            saveCurrentEditorState(); const arr = wintData[edSeason.value][edArea.value].sections; const c = parseInt(btn.getAttribute('data-cat'));
             if(btn.getAttribute('data-dir') === 'up' && c > 0) { [arr[c-1], arr[c]] = [arr[c], arr[c-1]]; renderDataEditor(); }
             if(btn.getAttribute('data-dir') === 'down' && c < arr.length-1) { [arr[c], arr[c+1]] = [arr[c+1], arr[c]]; renderDataEditor(); }
         }
     });
 
-    document.getElementById('wint-add-warning-btn').onclick = () => { saveCurrentEditorState(); wintData[edSeason.value][edArea.value].unshift({ category: "WARNING", warningText: "NEW WARNING", isCritical: false }); renderDataEditor(); };
-    document.getElementById('wint-add-cat-btn').onclick = () => { saveCurrentEditorState(); wintData[edSeason.value][edArea.value].push({ category: "New Section", tasks: [] }); renderDataEditor(); };
+    document.getElementById('wint-add-warning-btn').onclick = () => { saveCurrentEditorState(); wintData[edSeason.value][edArea.value].sections.unshift({ category: "WARNING", warningText: "NEW WARNING", isCritical: false }); renderDataEditor(); };
+    document.getElementById('wint-add-cat-btn').onclick = () => { saveCurrentEditorState(); wintData[edSeason.value][edArea.value].sections.push({ category: "New Section", tasks: [] }); renderDataEditor(); };
 
     function saveCurrentEditorState() {
         const s = edSeason.value; const a = edArea.value; if (!wintData[s] || !wintData[s][a]) return;
-        document.querySelectorAll('.wint-warn-inp').forEach(inp => { const c = inp.getAttribute('data-cat'); wintData[s][a][c].warningText = inp.value; wintData[s][a][c].isCritical = document.querySelector(`.wint-warn-crit[data-cat="${c}"]`).checked; });
-        document.querySelectorAll('.wint-cat-name').forEach(inp => { wintData[s][a][inp.getAttribute('data-cat')].category = inp.value; });
-        document.querySelectorAll('.wint-task-txt').forEach(inp => { wintData[s][a][inp.getAttribute('data-cat')].tasks[inp.getAttribute('data-task')].text = inp.value; });
+        
+        // Grab the tools from the top text area
+        const toolsInput = document.getElementById('wint-editor-tools-input');
+        if(toolsInput) wintData[s][a].tools = toolsInput.value;
+
+        document.querySelectorAll('.wint-warn-inp').forEach(inp => { const c = inp.getAttribute('data-cat'); wintData[s][a].sections[c].warningText = inp.value; wintData[s][a].sections[c].isCritical = document.querySelector(`.wint-warn-crit[data-cat="${c}"]`).checked; });
+        document.querySelectorAll('.wint-cat-name').forEach(inp => { wintData[s][a].sections[inp.getAttribute('data-cat')].category = inp.value; });
+        document.querySelectorAll('.wint-task-txt').forEach(inp => { wintData[s][a].sections[inp.getAttribute('data-cat')].tasks[inp.getAttribute('data-task')].text = inp.value; });
         document.querySelectorAll('.wint-m-url').forEach(inp => {
             const c = inp.getAttribute('data-cat'); const t = inp.getAttribute('data-task'); const m = inp.getAttribute('data-media');
-            wintData[s][a][c].tasks[t].media[m] = { type: document.querySelector(`.wint-m-type[data-cat="${c}"][data-task="${t}"][data-media="${m}"]`).value, url: inp.value };
+            wintData[s][a].sections[c].tasks[t].media[m] = { type: document.querySelector(`.wint-m-type[data-cat="${c}"][data-task="${t}"][data-media="${m}"]`).value, url: inp.value };
         });
         safeSave();
     }
@@ -423,7 +526,15 @@ function initWinterizationLogic() {
                 let rIdx = 1; ws.mergeCells(`A${rIdx}:C${rIdx}`);
                 let tr = ws.getRow(rIdx); tr.getCell(1).value = `${year} ${season.toUpperCase()} - ${area}`; tr.getCell(1).font = { size: 16, bold: true }; rIdx += 2;
 
-                wintData[season][area].forEach(sec => {
+                if (wintData[season][area].tools) {
+                    let toolsRow = ws.getRow(rIdx);
+                    ws.mergeCells(`A${rIdx}:C${rIdx}`);
+                    toolsRow.getCell(1).value = `Tools Needed: ${wintData[season][area].tools}`;
+                    toolsRow.getCell(1).font = { italic: true };
+                    rIdx += 2;
+                }
+
+                wintData[season][area].sections.forEach(sec => {
                     if (sec.category === "WARNING") { ws.mergeCells(`A${rIdx}:C${rIdx}`); ws.getRow(rIdx).getCell(1).value = `WARNING: ${sec.warningText}`; ws.getRow(rIdx).getCell(1).font = { color: { argb: 'FFFF0000' }, bold: true }; rIdx += 2; return; }
                     
                     let sr = ws.getRow(rIdx); sr.getCell(1).value = sec.category; sr.getCell(1).font = { size: 12, bold: true }; sr.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEEEEE' } }; rIdx++;

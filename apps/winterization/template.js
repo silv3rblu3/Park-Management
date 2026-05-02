@@ -20,7 +20,7 @@ function renderWinterizationApp() {
 
     <div id="wint-wrapper" style="max-width: 1200px; margin: 0 auto;">
         
-        <div class="app-toolbar wint-no-print" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div id="wint-app-toolbar" class="app-toolbar wint-no-print" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
             <h2 style="color: var(--accent-primary);">❄️ Winter Ops Tracker</h2>
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                 <button id="wint-export-excel-btn" class="btn-outline">📊 Export Excel</button>
@@ -29,7 +29,7 @@ function renderWinterizationApp() {
             </div>
         </div>
 
-        <div id="wint-view-mode" class="app-card wint-no-print">
+        <div id="wint-view-mode" class="app-card wint-no-print" style="display: block;">
             <div style="display: flex; gap: 10px; border-bottom: 2px solid var(--accent-primary); padding-bottom: 10px;">
                 <button class="wint-season-tab btn-primary" data-season="fall" style="flex: 1;">Fall Winterization</button>
                 <button class="wint-season-tab btn-outline" data-season="spring" style="flex: 1;">Spring De-Winterization</button>
@@ -38,10 +38,13 @@ function renderWinterizationApp() {
             <div id="wint-task-content" style="margin-top: 20px;"></div>
         </div>
 
-        <div id="wint-edit-mode" class="app-card hidden wint-no-print">
+        <div id="wint-edit-mode" class="app-card wint-no-print" style="display: none;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
                 <h3>System Configuration & Editor</h3>
-                <button id="wint-exit-edit-btn" class="btn-primary">Save & Return</button>
+                <div style="display: flex; gap: 10px;">
+                    <button id="wint-cancel-edit-btn" class="btn-outline">Cancel</button>
+                    <button id="wint-exit-edit-btn" class="btn-primary">Save & Return</button>
+                </div>
             </div>
             
             <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
@@ -59,7 +62,7 @@ function renderWinterizationApp() {
                 </div>
             </div>
             <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color);">
-                <button id="wint-add-warning-btn" class="btn-outline" style="color: var(--danger-color); border-color: var(--danger-color);">⚠️ Add Area Warning</button>
+                <button id="wint-add-warning-btn" class="btn-outline" style="color: var(--danger-color); border-color: var(--danger-color); display: inline-block;">⚠️ Add Area Warning</button>
                 <button id="wint-add-cat-btn" class="btn-primary">+ Add New Section</button>
             </div>
             <div id="wint-category-editor"></div>
@@ -76,7 +79,17 @@ function renderWinterizationApp() {
                     <label style="cursor: pointer;"><input type="checkbox" id="wint-print-blank-year"> Leave Year Blank</label>
                     <label style="cursor: pointer; color: var(--accent-primary);"><input type="checkbox" id="wint-print-blank"> Print Blank Forms</label>
                 </div>
-                <p style="margin-bottom: 15px;">Select areas to print for <strong id="wint-print-season-label" style="text-transform: uppercase;"></strong>:</p>
+                
+                <div style="margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color);">
+                    <label style="font-weight:bold; display:flex; align-items:center; gap: 10px;">Select Season: 
+                        <select id="wint-print-season-select" class="app-select" style="width: auto; margin: 0; flex: 1;">
+                            <option value="fall">Fall Winterization</option>
+                            <option value="spring">Spring De-Winterization</option>
+                        </select>
+                    </label>
+                </div>
+
+                <p style="margin-bottom: 15px;">Select areas to print:</p>
                 <div id="wint-print-checkboxes" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px;"></div>
                 <button type="button" id="wint-select-all-print" class="btn-outline" style="margin-bottom: 20px; width: 100%;">Select All</button>
                 <div style="text-align: right;">

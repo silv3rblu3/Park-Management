@@ -59,16 +59,18 @@ function initInventoryLogic() {
         });
     });
 
-    // Scanner instance placeholder
-    let html5QrcodeScanner = null;
+    // We are using the direct class now instead of the UI wrapper
+    let html5QrCode = null;
 
     function renderInvView(viewName) {
         stage.innerHTML = '';
         
-        // Clean up scanner if we leave the audit tab
-        if (viewName !== 'audit' && html5QrcodeScanner) {
-            html5QrcodeScanner.clear().catch(err => console.error("Scanner clear failed", err));
-            html5QrcodeScanner = null;
+        // Clean up scanner camera if we leave the audit tab
+        if (viewName !== 'audit' && html5QrCode) {
+            html5QrCode.stop().then(() => {
+                html5QrCode.clear();
+                html5QrCode = null;
+            }).catch(err => console.error("Scanner clear failed", err));
         }
 
         if (viewName === 'dashboard') {
@@ -183,7 +185,14 @@ function initInventoryLogic() {
                 const item = invData.items.find(i => i.sku === sku);
                 if (!item) return NotificationSystem.show("SKU not found in Master List", "error");
                 
-                if (html5QrcodeScanner) { html5QrcodeScanner.clear(); startBtn.style.display = 'block'; }
+                // If scanner is running, shut it down before showing the form
+                if (html5QrCode) { 
+                    html5QrCode.stop().then(() => {
+                        html5QrCode.clear(); 
+                        html5QrCode = null;
+                    }).catch(err => console.log(err)); 
+                    startBtn.style.display = 'block'; 
+                }
                 
                 document.getElementById('audit-item-name').innerText = item.name;
                 document.getElementById('audit-sku-lbl').innerText = item.sku;
@@ -191,7 +200,8 @@ function initInventoryLogic() {
                 document.getElementById('audit-hidden-sku').value = item.sku;
                 document.getElementById('audit-phys-qty').value = '';
                 
-                readerDiv.classList.add('hidden'); startBtn.classList.add('hidden');
+                readerDiv.classList.add('hidden'); 
+                startBtn.classList.add('hidden');
                 formArea.classList.remove('hidden');
                 document.getElementById('audit-phys-qty').focus();
             };
@@ -199,13 +209,35 @@ function initInventoryLogic() {
             document.getElementById('audit-manual-sku').addEventListener('change', (e) => loadAuditItem(e.target.value.toUpperCase()));
 
             startBtn.addEventListener('click', () => {
-                startBtn.style.display = 'none'; readerDiv.classList.remove('hidden');
-                html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: {width: 250, height: 250} }, false);
-                html5QrcodeScanner.render((decodedText) => { loadAuditItem(decodedText.trim().toUpperCase()); }, (err) => { /* ignore frame errors */ });
+                startBtn.style.display = 'none'; 
+                readerDiv.classList.remove('hidden');
+                
+                html5QrCode = new Html5Qrcode("reader");
+                
+                // This explicitly requests the rear-facing camera
+                html5QrCode.start(
+                    { facingMode: "environment" }, 
+                    { fps: 10, qrbox: { width: 250, height: 250 } },
+                    (decodedText) => { 
+                        // On successful scan
+                        loadAuditItem(decodedText.trim().toUpperCase()); 
+                    },
+                    (err) => { 
+                        // Ignore standard frame errors so console isn't flooded
+                    }
+                ).catch((err) => {
+                    NotificationSystem.show("Camera access denied or rear camera unavailable.", "error");
+                    startBtn.style.display = 'block';
+                    readerDiv.classList.add('hidden');
+                    console.error("Scanner Error:", err);
+                });
             });
 
             document.getElementById('cancel-audit-btn').addEventListener('click', () => {
-                formArea.classList.add('hidden'); readerDiv.classList.remove('hidden'); startBtn.classList.remove('hidden'); startBtn.style.display = 'block';
+                formArea.classList.add('hidden'); 
+                readerDiv.classList.remove('hidden'); 
+                startBtn.classList.remove('hidden'); 
+                startBtn.style.display = 'block';
                 document.getElementById('audit-manual-sku').value = '';
             });
 
@@ -223,7 +255,10 @@ function initInventoryLogic() {
                     NotificationSystem.show('Count matches. No change made.', 'success');
                 }
                 
-                formArea.classList.add('hidden'); readerDiv.classList.remove('hidden'); startBtn.style.display = 'block'; startBtn.classList.remove('hidden');
+                formArea.classList.add('hidden'); 
+                readerDiv.classList.remove('hidden'); 
+                startBtn.style.display = 'block'; 
+                startBtn.classList.remove('hidden');
                 document.getElementById('audit-manual-sku').value = '';
             });
         }
@@ -236,10 +271,10 @@ function initInventoryLogic() {
                     <p style="color: var(--text-secondary); margin-bottom: 15px;">Import CSV files to populate the database.</p>
                     
                     <input type="file" id="csv-import-items" accept=".csv" class="hidden">
-                    <button class="btn-outline" style="width: 100%; margin-bottom: 10px;" onclick="document.getElementById('csv-import-items').click()">📂 Import Master Items CSV</button>
+                    <button class="btn-outline" style="width: 100%; margin-bottom: 10px;" onclick="document.getElementById('csv-import-items').click()">📥 Import Master Items CSV</button>
                     
                     <input type="file" id="csv-import-trans" accept=".csv" class="hidden">
-                    <button class="btn-outline" style="width: 100%; margin-bottom: 10px;" onclick="document.getElementById('csv-import-trans').click()">📂 Import Transactions CSV</button>
+                    <button class="btn-outline" style="width: 100%; margin-bottom: 10px;" onclick="document.getElementById('csv-import-trans').click()">📥 Import Transactions CSV</button>
                     
                     <hr style="margin: 20px 0;">
                     <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 10px;">Note: Full JSON Backups and Wipes are handled in the Global Settings (Gear Icon top right).</p>
