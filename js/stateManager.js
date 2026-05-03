@@ -178,25 +178,150 @@ const StateManager = {
     getAppData: function(appName) { return this.loadGlobalState().apps[appName] || {}; },
     setAppData: function(appName, appData) { let state = this.loadGlobalState(); state.apps[appName] = appData; this.saveGlobalState(state); },
 
-    exportGlobalData: function() {
-        const state = this.loadGlobalState();
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
-        const anchor = document.createElement('a');
-        anchor.setAttribute("href", dataStr); anchor.setAttribute("download", `OmniHub_Master_Backup_${new Date().toISOString().split('T')[0]}.json`);
-        document.body.appendChild(anchor); anchor.click(); anchor.remove();
-        NotificationSystem.show('Global Backup Exported Successfully', 'success');
+    // --- The Smart Merge Engine ---
+    smartMerge: function(local, imported, type) {
+        if (type === 'global') {
+            let merged = { ...local };
+            if (imported.themes) merged.themes = this.smartMerge(local.themes || [], imported.themes, 'themes');
+            if (imported.apps) {
+                for (let app in imported.apps) {
+                    merged.apps[app] = this.smartMerge(local.apps[app] || {}, imported.apps[app], app);
+                }
+            }
+            return merged;
+        }
+        
+        if (type === 'themes') {
+            let merged = [...local];
+            imported.forEach(impTheme => {
+                const idx = merged.findIndex(t => t.id === impTheme.id);
+                if (idx > -1) merged[idx] = impTheme;
+                else merged.push(impTheme);
+            });
+            return merged;
+        }
+        
+        if (type === 'inventory') {
+            let merged = { items: local.items || [], transactions: local.transactions || [], categories: local.categories || [] };
+            (imported.categories || []).forEach(c => { if(!merged.categories.includes(c)) merged.categories.push(c); });
+            
+            (imported.items || []).forEach(imp => {
+                const idx = merged.items.findIndex(i => i.sku === imp.sku);
+                if (idx > -1) merged.items[idx] = { ...merged.items[idx], ...imp };
+                else merged.items.push(imp);
+            });
+            
+            (imported.transactions || []).forEach(imp => {
+                if (!merged.transactions.some(t => t.id === imp.id)) merged.transactions.push(imp);
+            });
+            return merged;
+        }
+
+        // Generic safe merger for Fleet & First Aid (Matches unique IDs)
+        if (['fleet', 'firstAid'].includes(type)) {
+            let merged = { ...local };
+            for (let key in imported) {
+                if (Array.isArray(imported[key])) {
+                    if (!merged[key]) merged[key] = [];
+                    imported[key].forEach(impObj => {
+                        if (typeof impObj === 'object' && impObj !== null && impObj.id) {
+                            const idx = merged[key].findIndex(i => i.id === impObj.id);
+                            if (idx > -1) merged[key][idx] = { ...merged[key][idx], ...impObj };
+                            else merged[key].push(impObj);
+                        } else {
+                            // If it has no ID, prevent exact duplicates but otherwise append
+                            if (typeof impObj !== 'object') {
+                                if (!merged[key].includes(impObj)) merged[key].push(impObj);
+                            } else {
+                                merged[key].push(impObj);
+                            }
+                        }
+                    });
+                } else if (typeof imported[key] === 'object' && imported[key] !== null) {
+                    merged[key] = this.smartMerge(merged[key] || {}, imported[key], 'nested_object');
+                } else {
+                    merged[key] = imported[key];
+                }
+            }
+            return merged;
+        }
+
+        // Deep merge for Winterization (Matches nested objects like fall -> A-Loop)
+        if (type === 'winterization' || type === 'nested_object') {
+            let merged = { ...local };
+            for (let key in imported) {
+                if (typeof imported[key] === 'object' && !Array.isArray(imported[key]) && imported[key] !== null) {
+                    merged[key] = this.smartMerge(merged[key] || {}, imported[key], 'nested_object');
+                } else {
+                    merged[key] = imported[key]; // Arrays or primitives completely overwrite at this depth
+                }
+            }
+            return merged;
+        }
+        
+        return imported;
     },
 
-    importGlobalData: function(file) {
+    exportData: function(target) {
+        const state = this.loadGlobalState();
+        let data, filename;
+        const date = new Date().toISOString().split('T')[0];
+
+        if (target === 'global') {
+            data = state;
+            filename = `PMH_Global_Master_${date}.json`;
+        } else if (target === 'themes') {
+            data = state.themes;
+            filename = `PMH_Themes_${date}.json`;
+        } else {
+            data = state.apps[target] || {};
+            filename = `PMH_${target.charAt(0).toUpperCase() + target.slice(1)}_Sync_${date}.json`;
+        }
+
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
+        const anchor = document.createElement('a');
+        anchor.setAttribute("href", dataStr); 
+        anchor.setAttribute("download", filename);
+        document.body.appendChild(anchor); 
+        anchor.click(); 
+        anchor.remove();
+        NotificationSystem.show('Export Successful', 'success');
+    },
+
+    importData: function(file, target, mode) {
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
-                const importedData = JSON.parse(e.target.result);
-                if (!importedData.apps) throw new Error("Invalid format.");
-                this.saveGlobalState(importedData);
-                NotificationSystem.show('Master Database Overwritten. Reloading...', 'success');
+                const imported = JSON.parse(e.target.result);
+                let state = this.loadGlobalState();
+
+                if (target === 'global') {
+                    if (!imported.apps) throw new Error("Invalid global format");
+                    if (mode === 'replace') state = imported;
+                    else state = this.smartMerge(state, imported, 'global');
+                } 
+                else if (target === 'themes') {
+                    if (!Array.isArray(imported)) throw new Error("Invalid themes format");
+                    if (mode === 'replace') state.themes = imported;
+                    else state.themes = this.smartMerge(state.themes, imported, 'themes');
+                    
+                    // Ensure active theme still exists
+                    if (!state.themes.find(t => t.id === state.activeThemeId)) {
+                        state.activeThemeId = state.themes[0].id;
+                    }
+                } 
+                else {
+                    if (mode === 'replace') state.apps[target] = imported;
+                    else state.apps[target] = this.smartMerge(state.apps[target] || {}, imported, target);
+                }
+
+                this.saveGlobalState(state);
+                NotificationSystem.show(`Data ${mode === 'replace' ? 'Replaced' : 'Merged'}. Reloading...`, 'success');
                 setTimeout(() => location.reload(), 1500);
-            } catch (err) { NotificationSystem.show('Import Failed: Invalid JSON file', 'error'); }
-        }; reader.readAsText(file);
+            } catch (err) {
+                NotificationSystem.show('Import Failed: Invalid JSON or corrupted data', 'error');
+            }
+        };
+        reader.readAsText(file);
     }
 };

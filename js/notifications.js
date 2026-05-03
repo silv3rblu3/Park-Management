@@ -31,8 +31,8 @@ const DialogSystem = {
         this.btnConfirm.onclick = () => {
             this.modal.close();
             if(this.resolvePromise) {
-                // If input is hidden, it's a confirm (return true). If visible, it's a prompt (return text).
-                this.resolvePromise(this.input.classList.contains('hidden') ? true : this.input.value);
+                // Check the inline display style to determine what to return
+                this.resolvePromise(this.input.style.display === 'none' ? true : this.input.value);
             }
         };
     },
@@ -41,8 +41,12 @@ const DialogSystem = {
         return new Promise((resolve) => {
             if(!this.modal) this.init();
             this.title.innerText = title; this.message.innerText = msg;
-            this.input.classList.add('hidden'); this.input.value = '';
-            this.btnCancel.classList.remove('hidden');
+            
+            // Hard enforce display none
+            this.input.style.display = 'none'; 
+            this.input.value = '';
+            
+            this.btnCancel.style.display = 'block';
             this.btnConfirm.className = 'btn-danger'; this.btnConfirm.innerText = 'Confirm';
             this.resolvePromise = resolve;
             this.modal.showModal();
@@ -53,8 +57,12 @@ const DialogSystem = {
         return new Promise((resolve) => {
             if(!this.modal) this.init();
             this.title.innerText = title; this.message.innerText = msg;
-            this.input.classList.remove('hidden'); this.input.value = defaultVal;
-            this.btnCancel.classList.remove('hidden');
+            
+            // Hard enforce display block
+            this.input.style.display = 'block'; 
+            this.input.value = defaultVal;
+            
+            this.btnCancel.style.display = 'block';
             this.btnConfirm.className = 'btn-primary'; this.btnConfirm.innerText = 'Submit';
             this.resolvePromise = resolve;
             this.modal.showModal();
@@ -66,8 +74,12 @@ const DialogSystem = {
         return new Promise((resolve) => {
             if(!this.modal) this.init();
             this.title.innerText = title; this.message.innerText = msg;
-            this.input.classList.add('hidden'); this.input.value = '';
-            this.btnCancel.classList.add('hidden');
+            
+            // Hard enforce display none
+            this.input.style.display = 'none'; 
+            this.input.value = '';
+            
+            this.btnCancel.style.display = 'none';
             this.btnConfirm.className = 'btn-primary'; this.btnConfirm.innerText = 'OK';
             this.resolvePromise = resolve;
             this.modal.showModal();

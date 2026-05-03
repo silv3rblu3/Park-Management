@@ -32,8 +32,6 @@ const CoreSystem = {
         const searchInput = document.getElementById('global-search');
         searchInput.addEventListener('input', (e) => {
             const term = e.target.value.toLowerCase();
-            
-            // This grabs any table row or searchable card currently rendered in the main stage
             const searchableElements = document.querySelectorAll('#app-container table tbody tr, #app-container .searchable-card');
             
             searchableElements.forEach(el => {
@@ -105,13 +103,36 @@ const CoreSystem = {
             NotificationSystem.show("Theme Deleted", "success");
         });
 
-        // 4. Global Data Export/Import
-        document.getElementById('global-export-btn').addEventListener('click', () => StateManager.exportGlobalData());
-        const importInput = document.getElementById('global-import-file');
-        document.getElementById('global-import-btn').addEventListener('click', () => importInput.click());
-        importInput.addEventListener('change', (e) => {
+        // 4. Advanced Data Sync & Routing
+        document.getElementById('btn-export-data').addEventListener('click', () => {
+            const target = document.getElementById('sync-target-select').value;
+            StateManager.exportData(target);
+        });
+
+        const mergeInput = document.getElementById('file-import-merge');
+        const replaceInput = document.getElementById('file-import-replace');
+
+        document.getElementById('btn-import-merge').addEventListener('click', () => mergeInput.click());
+        document.getElementById('btn-import-replace').addEventListener('click', () => replaceInput.click());
+
+        mergeInput.addEventListener('change', async (e) => {
             if (e.target.files.length > 0) {
-                if(confirm("WARNING: Wiping ALL data. Continue?")) StateManager.importGlobalData(e.target.files[0]);
+                const target = document.getElementById('sync-target-select').value;
+                const targetName = document.getElementById('sync-target-select').options[document.getElementById('sync-target-select').selectedIndex].text;
+                
+                const confirmed = await DialogSystem.confirm("Merge Data?", `This will safely sync the uploaded file with your current ${targetName} data. Existing items will be updated and new items added without creating duplicates. Proceed?`);
+                if (confirmed) StateManager.importData(e.target.files[0], target, 'merge');
+                e.target.value = '';
+            }
+        });
+
+        replaceInput.addEventListener('change', async (e) => {
+            if (e.target.files.length > 0) {
+                const target = document.getElementById('sync-target-select').value;
+                const targetName = document.getElementById('sync-target-select').options[document.getElementById('sync-target-select').selectedIndex].text;
+                
+                const confirmed = await DialogSystem.confirm("⚠️ OVERWRITE Data?", `This will COMPLETELY WIPE AND REPLACE your current ${targetName} data with the uploaded file. This cannot be undone. Proceed?`);
+                if (confirmed) StateManager.importData(e.target.files[0], target, 'replace');
                 e.target.value = '';
             }
         });
@@ -161,7 +182,7 @@ const CoreSystem = {
     generateHomeDashboard: function() {
         const state = StateManager.loadGlobalState();
         
-        // 1. Calculate Inventory Glance
+        // Calculate Inventory Glance
         let lowInvCount = 0;
         if (state.apps.inventory && state.apps.inventory.items) {
             state.apps.inventory.items.forEach(item => {
@@ -175,7 +196,7 @@ const CoreSystem = {
             });
         }
 
-        // 2. Calculate Fleet Glance (Separated Logic)
+        // Calculate Fleet Glance
         let vehiclesNeedingRepair = 0;
         let vehiclesNeedingInsp = 0;
         let totalVehicles = state.apps.fleet?.vehicles?.length || 0;
@@ -191,11 +212,8 @@ const CoreSystem = {
                 if (vInsp.length > 0) {
                     const lastI = vInsp[0];
                     const dDiff = Math.ceil((new Date(lastI.date).getTime() + 30*24*60*60*1000 - new Date()) / (1000*60*60*24));
-                    
-                    // If it's been less than 30 days, it doesn't need an inspection
                     if (dDiff >= 0) needsInsp = false;
 
-                    // Verify if past failed items were fixed by a subsequent service
                     if (lastI.needsWork && lastI.results) {
                         for (const [item, res] of Object.entries(lastI.results)) {
                             if (res === 'Fail' && !vSrv.some(s => s.task === item && new Date(s.date) >= new Date(lastI.date))) {
@@ -210,7 +228,7 @@ const CoreSystem = {
             });
         }
 
-        // 3. Calculate First Aid Glance
+        // Calculate First Aid Glance
         let firstAidKits = state.apps.firstAid?.categories?.length || 0;
 
         return `
@@ -257,9 +275,7 @@ const CoreSystem = {
         const container = document.getElementById('app-container');
         const titleLabel = document.getElementById('app-title');
         
-        // Clear global search bar on app switch
         document.getElementById('global-search').value = '';
-
         container.innerHTML = '';
 
         switch(appName) {

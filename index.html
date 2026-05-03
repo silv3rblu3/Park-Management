@@ -123,13 +123,28 @@
             <hr>
             
             <section class="settings-section">
-                <h4>System Data (Master Backup)</h4>
-                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 10px;">Export or import the entire database across all applications.</p>
-                <button id="global-export-btn" class="btn-primary" style="width: 100%; margin-bottom: 10px;">⬇️ Export All Data JSON</button>
+                <h4>System Data & App Sync</h4>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 10px;">Export, replace, or merge data. Select a specific app or perform a full global sync.</p>
                 
-                <div class="import-wrapper">
-                    <input type="file" id="global-import-file" accept=".json" style="display: none;">
-                    <button id="global-import-btn" class="btn-danger" style="width: 100%;">⬆️ Import & Overwrite All Data</button>
+                <select id="sync-target-select" class="app-select" style="margin-bottom: 15px;">
+                    <option value="global">Global Master (All Apps & Settings)</option>
+                    <option value="themes">Themes</option>
+                    <option value="inventory">Inventory Manager</option>
+                    <option value="fleet">Fleet Management</option>
+                    <option value="winterization">Winter Ops</option>
+                    <option value="firstAid">First Aid Tracker</option>
+                </select>
+                
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <button id="btn-export-data" class="btn-primary" style="width: 100%;">⬇️ Export Selected Data (.json)</button>
+                    
+                    <div style="display: flex; gap: 10px;">
+                        <input type="file" id="file-import-merge" accept=".json" style="display: none;">
+                        <button id="btn-import-merge" class="btn-outline" style="flex: 1; border-color: var(--accent-primary); color: var(--accent-primary);">🔄 Merge Import</button>
+                        
+                        <input type="file" id="file-import-replace" accept=".json" style="display: none;">
+                        <button id="btn-import-replace" class="btn-danger" style="flex: 1;">⚠️ Replace Import</button>
+                    </div>
                 </div>
             </section>
         </div>

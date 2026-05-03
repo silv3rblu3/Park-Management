@@ -132,7 +132,6 @@ function initWinterizationLogic() {
         const seasonData = wintData[season][area] || { tools: "", sections: [] };
         const safeArea = area.replace(/'/g, "\\'");
         
-        // Render Tools Block if it exists
         if (seasonData.tools) {
             innerContent += `
                 <div style="background-color: rgba(0,0,0,0.03); padding: 15px; border-radius: var(--radius-md); border-left: 4px solid var(--accent-primary); margin-bottom: 20px;">
@@ -215,7 +214,6 @@ function initWinterizationLogic() {
         taskContentContainer.appendChild(generateAreaDOM(currentSeason, currentArea));
     }
 
-    // --- EVENT DELEGATION & PERSISTENCE ---
     document.getElementById('wint-wrapper').addEventListener('input', (e) => {
         if (e.target.classList.contains('persistent-input')) {
             const s = e.target.getAttribute('data-season');
@@ -238,7 +236,6 @@ function initWinterizationLogic() {
         });
     });
 
-    // Fill Column Logic
     const fillModal = document.getElementById('wint-fill-modal');
     let activeFillBtn = null; let activeFillIndex = 0;
     
@@ -283,7 +280,6 @@ function initWinterizationLogic() {
         document.getElementById('wint-media-modal').close();
     };
 
-    // --- PRINTING ---
     const printModal = document.getElementById('wint-print-modal');
     
     function populatePrintCheckboxes(season) {
@@ -296,7 +292,7 @@ function initWinterizationLogic() {
 
     document.getElementById('wint-open-print-btn').addEventListener('click', () => {
         const printSeasonSelect = document.getElementById('wint-print-season-select');
-        printSeasonSelect.value = currentSeason; // Set to the season the user was just looking at
+        printSeasonSelect.value = currentSeason;
         document.getElementById('wint-print-year').value = new Date().getFullYear();
         populatePrintCheckboxes(currentSeason);
         printModal.showModal();
@@ -337,18 +333,14 @@ function initWinterizationLogic() {
     const edArea = document.getElementById('wint-editor-area');
     
     document.getElementById('wint-toggle-edit-btn').onclick = () => { 
-        // Take a snapshot of the data before any edits happen
         editorBackupData = JSON.stringify(wintData);
-        
-        // Hide the main toolbar and the view mode using strict inline styles
         appToolbar.style.display = 'none';
         viewMode.style.display = 'none'; 
         editMode.style.display = 'block'; 
         
-        edSeason.value = currentSeason; // Default to active season
+        edSeason.value = currentSeason;
         populateEditorAreaSelect(); 
         
-        // Default to the active area if it exists in this season
         if (Array.from(edArea.options).some(opt => opt.value === currentArea)) {
             edArea.value = currentArea;
         }
@@ -358,29 +350,22 @@ function initWinterizationLogic() {
     
     document.getElementById('wint-exit-edit-btn').onclick = () => { 
         saveCurrentEditorState(); 
-        editorBackupData = null; // Clear backup memory
-        
-        // Bring back the normal UI using strict inline styles
+        editorBackupData = null;
         editMode.style.display = 'none'; 
         viewMode.style.display = 'block'; 
         appToolbar.style.display = 'flex';
-        
         renderAreaTabs(); renderTasks(); 
     };
 
     document.getElementById('wint-cancel-edit-btn').onclick = () => { 
-        // Restore from snapshot to undo any auto-saved additions/deletions
         if (editorBackupData) {
             wintData = JSON.parse(editorBackupData);
-            safeSave(); // Force overwrite localStorage with the clean backup
+            safeSave(); 
             editorBackupData = null;
         }
-        
-        // Bring back the normal UI using strict inline styles
         editMode.style.display = 'none'; 
         viewMode.style.display = 'block'; 
         appToolbar.style.display = 'flex';
-        
         renderAreaTabs(); renderTasks(); 
     };
 
@@ -394,7 +379,6 @@ function initWinterizationLogic() {
         const previousArea = edArea.value; 
         populateEditorAreaSelect(); 
         
-        // Retain the previously selected area if switching seasons allows it
         if (Array.from(edArea.options).some(opt => opt.value === previousArea)) {
             edArea.value = previousArea;
         }
@@ -403,19 +387,41 @@ function initWinterizationLogic() {
     
     edArea.addEventListener('change', renderDataEditor);
 
-    document.getElementById('wint-add-area-btn').onclick = () => {
-        const name = prompt("Enter new area name:");
-        if(name && !wintData[edSeason.value][name]) { wintData[edSeason.value][name] = { tools: "", sections: [] }; populateEditorAreaSelect(); edArea.value = name; renderDataEditor(); safeSave(); }
-    };
-    document.getElementById('wint-rename-area-btn').onclick = () => {
-        const oldName = edArea.value; const newName = prompt("Rename area to:", oldName);
-        if(newName && newName !== oldName && !wintData[edSeason.value][newName]) {
-            wintData[edSeason.value][newName] = wintData[edSeason.value][oldName]; delete wintData[edSeason.value][oldName];
-            populateEditorAreaSelect(); edArea.value = newName; renderDataEditor(); safeSave();
+    // Wired to use DialogSystem
+    document.getElementById('wint-add-area-btn').onclick = async () => {
+        const name = await DialogSystem.prompt("Add Area", "Enter new area name:");
+        if(name && typeof name === 'string' && !wintData[edSeason.value][name]) { 
+            wintData[edSeason.value][name] = { tools: "", sections: [] }; 
+            populateEditorAreaSelect(); 
+            edArea.value = name; 
+            renderDataEditor(); 
+            safeSave(); 
         }
     };
-    document.getElementById('wint-delete-area-btn').onclick = () => {
-        if(confirm(`Delete ${edArea.value} permanently?`)) { delete wintData[edSeason.value][edArea.value]; populateEditorAreaSelect(); renderDataEditor(); safeSave(); }
+
+    document.getElementById('wint-rename-area-btn').onclick = async () => {
+        const oldName = edArea.value; 
+        if (!oldName) return;
+        const newName = await DialogSystem.prompt("Rename Area", "Rename area to:", oldName);
+        if(newName && typeof newName === 'string' && newName !== oldName && !wintData[edSeason.value][newName]) {
+            wintData[edSeason.value][newName] = wintData[edSeason.value][oldName]; 
+            delete wintData[edSeason.value][oldName];
+            populateEditorAreaSelect(); 
+            edArea.value = newName; 
+            renderDataEditor(); 
+            safeSave();
+        }
+    };
+
+    document.getElementById('wint-delete-area-btn').onclick = async () => {
+        if (!edArea.value) return;
+        const confirmed = await DialogSystem.confirm("Delete Area", `Are you sure you want to permanently delete ${edArea.value}?`);
+        if(confirmed) { 
+            delete wintData[edSeason.value][edArea.value]; 
+            populateEditorAreaSelect(); 
+            renderDataEditor(); 
+            safeSave(); 
+        }
     };
     
     ['up', 'down'].forEach(dir => {
@@ -437,7 +443,6 @@ function initWinterizationLogic() {
     function renderDataEditor() {
         const s = edSeason.value; const a = edArea.value; catContainer.innerHTML = ''; if (!wintData[s] || !wintData[s][a]) return;
         
-        // Render the Tool input box first
         catContainer.innerHTML = `
             <div style="margin-bottom: 25px; background: rgba(0,0,0,0.02); border: 1px solid var(--border-color); padding: 15px; border-radius: var(--radius-md);">
                 <label style="font-weight:bold; color: var(--accent-primary); display:block; margin-bottom: 10px;">🛠️ Tools Needed for this Area:</label>
@@ -445,7 +450,6 @@ function initWinterizationLogic() {
             </div>
         `;
 
-        // Hard toggle display instead of relying on classList.toggle('hidden')
         const warningBtn = document.getElementById('wint-add-warning-btn');
         if (wintData[s][a].sections.some(sec => sec.category === "WARNING")) {
             warningBtn.style.display = 'none';
@@ -496,7 +500,6 @@ function initWinterizationLogic() {
     function saveCurrentEditorState() {
         const s = edSeason.value; const a = edArea.value; if (!wintData[s] || !wintData[s][a]) return;
         
-        // Grab the tools from the top text area
         const toolsInput = document.getElementById('wint-editor-tools-input');
         if(toolsInput) wintData[s][a].tools = toolsInput.value;
 

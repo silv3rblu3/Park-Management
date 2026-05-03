@@ -7,7 +7,6 @@ function initInventoryLogic() {
         invData = { 
             items: [], 
             transactions: [],
-            // Initialize Master Categories list
             categories: [
                 "General Supplies",
                 "Plumbing",
@@ -29,7 +28,7 @@ function initInventoryLogic() {
         itemTrans.forEach(t => {
             if (t.type === 'Stock In') qty += parseFloat(t.quantity);
             else if (t.type === 'Stock Out') qty -= parseFloat(t.quantity);
-            else if (t.type === 'Audit Correction') qty = parseFloat(t.quantity); // Kept so past audits don't break
+            else if (t.type === 'Audit Correction') qty = parseFloat(t.quantity); 
         });
         return qty;
     };
@@ -73,29 +72,29 @@ function initInventoryLogic() {
         });
     });
 
-    // Populate Datalist on App Load so it's ready in the modal
     populateCategoryDatalist();
 
     function populateCategoryDatalist() {
-        const dl = document.getElementById('inv-master-categories');
-        if (dl) {
-            dl.innerHTML = '';
-            invData.categories.forEach(cat => {
-                const option = document.createElement('option');
-                option.value = cat;
-                dl.appendChild(option);
-            });
-        }
+        ['inv-master-categories', 'inv-master-categories-edit'].forEach(id => {
+            const dl = document.getElementById(id);
+            if (dl) {
+                dl.innerHTML = '';
+                invData.categories.forEach(cat => {
+                    const option = document.createElement('option');
+                    option.value = cat;
+                    dl.appendChild(option);
+                });
+            }
+        });
     }
 
-    // Smart memory variable for the Audit Scanner
     let pendingAuditSku = null;
     let html5QrCode = null;
+    let torchOn = false;
 
     function renderInvView(viewName) {
         stage.innerHTML = '';
         
-        // Clean up scanner camera if we leave the audit tab
         if (viewName !== 'audit' && html5QrCode) {
             html5QrCode.stop().then(() => {
                 html5QrCode.clear();
@@ -103,7 +102,6 @@ function initInventoryLogic() {
             }).catch(err => console.error("Scanner clear failed", err));
         }
 
-        // Populate datalist again when rendering dashboard/transactions to ensure it's fresh
         if (viewName !== 'reports') populateCategoryDatalist();
 
         if (viewName === 'dashboard') {
@@ -115,10 +113,10 @@ function initInventoryLogic() {
                 </div>
                 <div class="app-table-container">
                     <table class="app-table">
-                        <thead><tr><th>SKU</th><th>Item Name</th><th>Category</th><th>Location</th><th>Qty on Hand</th><th>Reorder Level</th><th>Target Qty</th></tr></thead>
+                        <thead><tr><th>Actions</th><th>SKU</th><th>Vendor Item ID</th><th>Item Name</th><th>Category</th><th>Location</th><th>Qty on Hand</th><th>Reorder Level</th><th>Target Qty</th></tr></thead>
                         <tbody id="inv-dash-body">`;
             
-            if (invData.items.length === 0) { html += `<tr><td colspan="7" style="text-align:center;">No items found. Import a CSV or add manually.</td></tr>`; } 
+            if (invData.items.length === 0) { html += `<tr><td colspan="9" style="text-align:center;">No items found. Import a CSV or add manually.</td></tr>`; } 
             else {
                 invData.items.forEach(item => {
                     const qty = getCurrentQty(item.sku);
@@ -127,7 +125,10 @@ function initInventoryLogic() {
                     else if (qty <= item.reorderLevel) rowClass = 'inv-row-warning';
 
                     html += `<tr class="${rowClass}">
-                                <td><strong>${item.sku}</strong></td><td>${item.name}</td><td>${item.category || ''}</td><td>${item.location || ''}</td>
+                                <td><button class="btn-outline inv-edit-btn" data-sku="${item.sku}" style="padding: 4px 8px; font-size: 0.8rem;">✏️ Edit</button></td>
+                                <td><strong>${item.sku}</strong></td>
+                                <td style="font-size: 0.85rem; color: var(--text-secondary);">${item.vendorId || '--'}</td>
+                                <td>${item.name}</td><td>${item.category || ''}</td><td>${item.location || ''}</td>
                                 <td style="font-size: 1.1rem; font-weight: bold;">${qty}</td><td>${item.reorderLevel}</td><td>${item.targetQty}</td>
                              </tr>`;
                 });
@@ -139,6 +140,25 @@ function initInventoryLogic() {
                 const term = e.target.value.toLowerCase();
                 const rows = document.querySelectorAll('#inv-dash-body tr');
                 rows.forEach(row => { row.style.display = row.innerText.toLowerCase().includes(term) ? '' : 'none'; });
+            });
+
+            document.querySelectorAll('.inv-edit-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const sku = e.target.getAttribute('data-sku');
+                    const item = invData.items.find(i => i.sku === sku);
+                    if (!item) return;
+
+                    document.getElementById('edit-sku').value = item.sku;
+                    document.getElementById('edit-name').value = item.name;
+                    document.getElementById('edit-cat').value = item.category || '';
+                    document.getElementById('edit-loc').value = item.location || '';
+                    document.getElementById('edit-vendor').value = item.vendorId || '';
+                    document.getElementById('edit-reorder').value = item.reorderLevel;
+                    document.getElementById('edit-target').value = item.targetQty;
+                    document.getElementById('edit-cost').value = item.unitCost || 0;
+
+                    document.getElementById('inv-edit-modal').showModal();
+                });
             });
         } 
         else if (viewName === 'transactions') {
@@ -191,6 +211,15 @@ function initInventoryLogic() {
             <div class="app-card" style="text-align: center; max-width: 600px; margin: 0 auto;">
                 <h3 style="margin-bottom: 15px;">Inventory Audit Scanner</h3>
                 <input type="text" id="audit-manual-sku" class="app-input" placeholder="Type SKU manually and hit Enter..." style="font-size: 1.2rem; text-align: center; margin-bottom: 20px;">
+                
+                <div id="camera-controls" class="hidden" style="margin-bottom: 15px; padding: 15px; background: rgba(0,0,0,0.02); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                    <button type="button" id="toggle-torch-btn" class="btn-outline" style="width: 100%; margin-bottom: 15px; border-color: #f39c12; color: #f39c12;">🔦 Toggle Flashlight</button>
+                    
+                    <label style="display:flex; justify-content: space-between; font-size: 0.9rem; font-weight: bold; margin-bottom: 5px;">Camera Zoom: <span id="zoom-val">1x</span></label>
+                    <input type="range" id="camera-zoom-slider" min="1" max="5" step="0.1" value="1" style="width: 100%; cursor: pointer;">
+                    <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 5px;">Use zoom if the camera won't focus closely on the barcode.</p>
+                </div>
+                
                 <div id="reader" style="width: 100%; margin: 0 auto 20px auto;"></div>
                 <button id="start-scanner" class="btn-outline" style="width: 100%; margin-bottom: 20px;">📷 Start Camera Scanner</button>
                 
@@ -211,6 +240,8 @@ function initInventoryLogic() {
             </div>`;
 
             const startBtn = document.getElementById('start-scanner');
+            const camControls = document.getElementById('camera-controls');
+            const torchBtn = document.getElementById('toggle-torch-btn');
             const formArea = document.getElementById('audit-form-area');
             const readerDiv = document.getElementById('reader');
 
@@ -222,11 +253,13 @@ function initInventoryLogic() {
                         html5QrCode.stop().then(() => {
                             html5QrCode.clear(); 
                             html5QrCode = null;
+                            torchOn = false;
                         }).catch(err => console.log(err)); 
                         startBtn.style.display = 'block'; 
                     }
                     readerDiv.classList.add('hidden');
                     startBtn.classList.add('hidden');
+                    camControls.classList.add('hidden');
                     
                     DialogSystem.confirm("Barcode Not Found", `The SKU [${sku}] isn't in your master list. Do you want to add it now?`)
                     .then(confirm => {
@@ -245,6 +278,7 @@ function initInventoryLogic() {
                     html5QrCode.stop().then(() => {
                         html5QrCode.clear(); 
                         html5QrCode = null;
+                        torchOn = false;
                     }).catch(err => console.log(err)); 
                     startBtn.style.display = 'block'; 
                 }
@@ -257,6 +291,7 @@ function initInventoryLogic() {
                 
                 readerDiv.classList.add('hidden'); 
                 startBtn.classList.add('hidden');
+                camControls.classList.add('hidden');
                 formArea.classList.remove('hidden');
                 document.getElementById('audit-phys-qty').focus();
             };
@@ -273,11 +308,39 @@ function initInventoryLogic() {
                     { fps: 10, qrbox: { width: 250, height: 250 } },
                     (decodedText) => { loadAuditItem(decodedText.trim().toUpperCase()); },
                     (err) => {} // Ignore frame errors
-                ).catch((err) => {
+                ).then(() => {
+                    camControls.classList.remove('hidden');
+                    html5QrCode.applyVideoConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(() => {});
+
+                    const zoomSlider = document.getElementById('camera-zoom-slider');
+                    const zoomVal = document.getElementById('zoom-val');
+                    zoomSlider.addEventListener('input', async (e) => {
+                        const z = parseFloat(e.target.value);
+                        zoomVal.innerText = z.toFixed(1) + 'x';
+                        try {
+                            await html5QrCode.applyVideoConstraints({ advanced: [{ zoom: z }] });
+                        } catch(err) { }
+                    });
+
+                }).catch((err) => {
                     NotificationSystem.show("Camera access denied or rear camera unavailable.", "error");
                     startBtn.style.display = 'block';
                     readerDiv.classList.add('hidden');
                 });
+            });
+
+            torchBtn.addEventListener('click', async () => {
+                if (html5QrCode && html5QrCode.getState() === 2) { 
+                    torchOn = !torchOn;
+                    try {
+                        await html5QrCode.applyVideoConstraints({ advanced: [{ torch: torchOn }] });
+                        torchBtn.style.backgroundColor = torchOn ? '#f39c12' : 'transparent';
+                        torchBtn.style.color = torchOn ? 'white' : '#f39c12';
+                    } catch (err) {
+                        NotificationSystem.show("Flashlight not supported by this camera/browser.", "error");
+                        torchOn = false;
+                    }
+                }
             });
 
             document.getElementById('cancel-audit-btn').addEventListener('click', () => {
@@ -320,7 +383,6 @@ function initInventoryLogic() {
         }
         else if (viewName === 'reports') {
             
-            // Calculate defaults for Date Pickers
             const todayStr = new Date().toISOString().split('T')[0];
             const lastYear = new Date();
             lastYear.setFullYear(lastYear.getFullYear() - 1);
@@ -346,8 +408,7 @@ function initInventoryLogic() {
                         <button id="print-report-btn" class="btn-outline hidden" style="flex: 1; min-width: 150px; padding: 11px;">🖨️ Print Report</button>
                     </div>
                     
-                    <div id="report-results-container" class="app-table-container hidden" style="margin-top: 20px; max-height: 400px; overflow-y: auto;">
-                        </div>
+                    <div id="report-results-container" class="app-table-container hidden" style="margin-top: 20px; max-height: 400px; overflow-y: auto;"></div>
                 </div>
 
                 <div class="app-card inv-no-print">
@@ -397,7 +458,7 @@ function initInventoryLogic() {
                 </div>
             </div>`;
 
-            // --- Updated Report Generator Logic with Spend and Metrics ---
+            // Report Generator Logic
             document.getElementById('generate-report-btn').addEventListener('click', () => {
                 const startStr = document.getElementById('report-start').value;
                 const endStr = document.getElementById('report-end').value;
@@ -406,22 +467,20 @@ function initInventoryLogic() {
                 
                 const startDate = new Date(startStr);
                 const endDate = new Date(endStr);
-                endDate.setHours(23, 59, 59, 999); // Push end date to the very end of the day
+                endDate.setHours(23, 59, 59, 999); 
 
-                // Build mapping object including category, stock, and spend
                 const usageStats = {};
                 invData.items.forEach(i => {
                     usageStats[i.sku] = { 
                         name: i.name, 
                         category: i.category || 'Uncategorized',
-                        currentQty: getCurrentQty(i.sku), // Highly useful for reference
+                        currentQty: getCurrentQty(i.sku),
                         added: 0, 
                         used: 0,
                         totalSpend: 0 
                     };
                 });
 
-                // Tally transactions within date range
                 invData.transactions.forEach(t => {
                     const tDate = new Date(t.date);
                     if (tDate >= startDate && tDate <= endDate && usageStats[t.sku]) {
@@ -429,8 +488,6 @@ function initInventoryLogic() {
                         
                         if (t.type === 'Stock In') {
                             usageStats[t.sku].added += qty;
-                            // Calculate spend based on the actualUnitCost saved at the time of the transaction.
-                            // If missing, fallback to current master item cost to prevent NaNs
                             const cost = t.actualUnitCost || invData.items.find(i => i.sku === t.sku)?.unitCost || 0;
                             usageStats[t.sku].totalSpend += (qty * cost);
                         }
@@ -482,7 +539,6 @@ function initInventoryLogic() {
                     tableHtml += `<tr><td colspan="7" style="text-align: center;">No inventory activity found in this date range.</td></tr>`;
                 }
                 
-                // Add the Grand Total row to the bottom
                 tableHtml += `
                     </tbody>
                     <tfoot>
@@ -500,7 +556,6 @@ function initInventoryLogic() {
                 document.getElementById('print-report-btn').classList.remove('hidden');
             });
 
-            // --- Report Print Logic ---
             document.getElementById('print-report-btn').addEventListener('click', () => {
                 const start = document.getElementById('report-start').value;
                 const end = document.getElementById('report-end').value;
@@ -517,7 +572,6 @@ function initInventoryLogic() {
                 window.print();
             });
 
-            // JSON Export/Import Integrations
             document.getElementById('export-inv-json-btn').addEventListener('click', () => {
                 const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(invData, null, 2));
                 const anchor = document.createElement('a');
@@ -577,12 +631,11 @@ function initInventoryLogic() {
                 }
             });
 
-            // PapaParse Integrations (CSV)
             document.getElementById('csv-import-items').addEventListener('change', (e) => {
                 if(e.target.files.length > 0) {
                     Papa.parse(e.target.files[0], { header: true, skipEmptyLines: true, complete: function(results) {
                         const newItems = results.data.map(row => { return {
-                            sku: row['SKU'] || '', name: row['Item Name'] || '', vendor: row['Vendor'] || '', desc: row['Description'] || '', category: row['Category'] || '', location: row['Location'] || '',
+                            sku: row['SKU'] || '', name: row['Item Name'] || '', vendor: row['Vendor'] || '', desc: row['Description'] || '', category: row['Category'] || '', location: row['Location'] || '', vendorId: row['Vendor Item ID'] || '',
                             unitCost: parseFloat((row['Unit Cost'] || '0').replace(/[^0-9.-]+/g,"")), reorderLevel: parseInt(row['Reorder Level'] || 0), targetQty: parseInt(row['Target Qty'] || 0)
                         };}).filter(i => i.sku !== '');
                         invData.items = newItems; safeSave();
@@ -604,7 +657,6 @@ function initInventoryLogic() {
                 }
             });
 
-            // --- Logic for Category Manager ---
             document.getElementById('add-master-cat').addEventListener('click', () => {
                 const name = document.getElementById('new-master-cat').value.trim();
                 if (name && !invData.categories.includes(name)) {
@@ -633,7 +685,7 @@ function initInventoryLogic() {
         }
     }
 
-    // --- Manual Item Modal and 'Smart Routing' in Audit ---
+    // --- Modal Logic (Add & Edit & Delete) ---
     const addModal = document.getElementById('inv-add-modal');
     document.getElementById('inv-add-item-btn').addEventListener('click', () => addModal.showModal());
     document.getElementById('close-inv-add').addEventListener('click', () => addModal.close());
@@ -644,7 +696,7 @@ function initInventoryLogic() {
         if(invData.items.find(i => i.sku === sku)) return NotificationSystem.show('SKU already exists!', 'error');
         
         invData.items.push({
-            sku: sku, name: document.getElementById('new-name').value, category: document.getElementById('new-cat').value, location: document.getElementById('new-loc').value,
+            sku: sku, name: document.getElementById('new-name').value, category: document.getElementById('new-cat').value, location: document.getElementById('new-loc').value, vendorId: document.getElementById('new-vendor').value,
             reorderLevel: parseFloat(document.getElementById('new-reorder').value), targetQty: parseFloat(document.getElementById('new-target').value), unitCost: parseFloat(document.getElementById('new-cost').value)
         });
         
@@ -659,6 +711,53 @@ function initInventoryLogic() {
             renderInvView('audit'); 
         } else {
             renderInvView(activeTab); 
+        }
+    });
+
+    const editModal = document.getElementById('inv-edit-modal');
+    document.getElementById('close-inv-edit').addEventListener('click', () => editModal.close());
+
+    document.getElementById('inv-edit-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const sku = document.getElementById('edit-sku').value; 
+        
+        const existingIndex = invData.items.findIndex(i => i.sku === sku);
+        if (existingIndex > -1) {
+            invData.items[existingIndex] = {
+                ...invData.items[existingIndex], 
+                name: document.getElementById('edit-name').value, 
+                category: document.getElementById('edit-cat').value, 
+                location: document.getElementById('edit-loc').value, 
+                vendorId: document.getElementById('edit-vendor').value,
+                reorderLevel: parseFloat(document.getElementById('edit-reorder').value), 
+                targetQty: parseFloat(document.getElementById('edit-target').value), 
+                unitCost: parseFloat(document.getElementById('edit-cost').value)
+            };
+            
+            safeSave(); 
+            editModal.close(); 
+            NotificationSystem.show('Item Details Updated', 'success');
+            
+            const activeTab = document.querySelector('.inv-tab.btn-primary').getAttribute('data-target');
+            renderInvView(activeTab); 
+        } else {
+            NotificationSystem.show('Critical Error: SKU not found for update.', 'error');
+        }
+    });
+
+    document.getElementById('delete-inv-item-btn').addEventListener('click', async () => {
+        const sku = document.getElementById('edit-sku').value;
+        const confirmed = await DialogSystem.confirm("Delete Item", `Are you sure you want to completely remove [${sku}] from the master list? This cannot be undone.`);
+        if (confirmed) {
+            const existingIndex = invData.items.findIndex(i => i.sku === sku);
+            if (existingIndex > -1) {
+                invData.items.splice(existingIndex, 1);
+                safeSave();
+                editModal.close();
+                NotificationSystem.show('Item Deleted', 'success');
+                const activeTab = document.querySelector('.inv-tab.btn-primary').getAttribute('data-target');
+                renderInvView(activeTab);
+            }
         }
     });
 

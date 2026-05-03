@@ -7,7 +7,7 @@ function renderInventoryApp() {
         #inv-wrapper { max-width: 1200px; margin: 0 auto; }
         #inv-stage { margin-top: 20px; }
         
-        /* Removed the forced grid layout for a mobile-friendly flex column */
+        /* Mobile-friendly flex column layout */
         .inv-split-layout { display: flex; flex-direction: column; gap: 20px; }
         
         /* Functional States */
@@ -62,7 +62,10 @@ function renderInventoryApp() {
                 <datalist id="inv-master-categories"></datalist>
                 <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: -10px; margin-bottom: 10px;">To manage the master list, go to the 'Reports & Data' tab.</p>
 
-                <label>Storage Location</label><input type="text" id="new-loc" class="app-input" placeholder="e.g., Shed A, Bin 3">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                    <div><label>Storage Location</label><input type="text" id="new-loc" class="app-input" placeholder="e.g., Shed A, Bin 3"></div>
+                    <div><label>Vendor Item ID</label><input type="text" id="new-vendor" class="app-input" placeholder="Store ID / MPN"></div>
+                </div>
                 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
                     <div><label>Target Quantity (Pars)</label><input type="number" id="new-target" class="app-input" placeholder="100" required></div>
@@ -73,6 +76,38 @@ function renderInventoryApp() {
                 
                 <div style="text-align: right; margin-top: 20px;">
                     <button type="submit" class="btn-primary" style="width: 100%;">💾 Save to Master List</button>
+                </div>
+            </form>
+        </dialog>
+
+        <dialog id="inv-edit-modal">
+            <div class="modal-header">
+                <h3>Edit Item Details</h3>
+                <button id="close-inv-edit" class="icon-btn">❌</button>
+            </div>
+            <form id="inv-edit-form" class="modal-body">
+                <label>SKU (Barcode Value - Read Only)</label><input type="text" id="edit-sku" class="app-input" readonly style="background-color: rgba(0,0,0,0.1); cursor: not-allowed;">
+                <label>Item Name</label><input type="text" id="edit-name" class="app-input" required>
+                
+                <label>Category</label>
+                <input type="text" id="edit-cat" class="app-input" list="inv-master-categories-edit">
+                <datalist id="inv-master-categories-edit"></datalist>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                    <div><label>Storage Location</label><input type="text" id="edit-loc" class="app-input"></div>
+                    <div><label>Vendor Item ID</label><input type="text" id="edit-vendor" class="app-input"></div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                    <div><label>Target Quantity (Pars)</label><input type="number" id="edit-target" class="app-input" required></div>
+                    <div><label>Reorder Level (Low Stock)</label><input type="number" id="edit-reorder" class="app-input" required></div>
+                </div>
+                
+                <label>Estimated Unit Cost ($)</label><input type="number" id="edit-cost" class="app-input" step="0.01">
+                
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="button" id="delete-inv-item-btn" class="btn-danger" style="flex: 1;">🗑️ Delete Item</button>
+                    <button type="submit" class="btn-primary" style="flex: 2;">💾 Update Item</button>
                 </div>
             </form>
         </dialog>
