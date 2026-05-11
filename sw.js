@@ -1,6 +1,6 @@
 // sw.js
 
-const CACHE_NAME = 'omnihub-v1';
+const CACHE_NAME = 'omnihub-v2'; // Bumped version to force cache refresh
 
 // These are all the files the app needs to function completely offline.
 const ASSETS_TO_CACHE = [
@@ -20,6 +20,8 @@ const ASSETS_TO_CACHE = [
     './apps/winterization/app.js',
     './apps/first-aid/template.js',
     './apps/first-aid/app.js',
+    './apps/parts/template.js',
+    './apps/parts/app.js',
     // Cache the external libraries for offline barcode scanning and CSV parsing
     'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js',
     'https://unpkg.com/html5-qrcode'

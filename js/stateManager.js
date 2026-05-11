@@ -164,7 +164,8 @@ const StateManager = {
             },
             inventory: { items: [], transactions: [] },
             winterization: { fall: {}, spring: {} },
-            firstAid: { categories: [], items: [], logs: [] }
+            firstAid: { categories: [], items: [], logs: [] },
+            parts: { partsCatalog: [], areaTags: {}, kits: [], transactions: [] }
         }
     },
 
@@ -217,8 +218,8 @@ const StateManager = {
             return merged;
         }
 
-        // Generic safe merger for Fleet & First Aid (Matches unique IDs)
-        if (['fleet', 'firstAid'].includes(type)) {
+        // Generic safe merger for Fleet, First Aid, & Parts (Matches unique IDs)
+        if (['fleet', 'firstAid', 'parts'].includes(type)) {
             let merged = { ...local };
             for (let key in imported) {
                 if (Array.isArray(imported[key])) {

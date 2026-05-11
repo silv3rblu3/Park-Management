@@ -231,6 +231,16 @@ const CoreSystem = {
         // Calculate First Aid Glance
         let firstAidKits = state.apps.firstAid?.categories?.length || 0;
 
+        // Calculate Parts Glance
+        let lowParts = 0;
+        let criticalOut = 0;
+        if (state.apps.parts && state.apps.parts.partsCatalog) {
+            state.apps.parts.partsCatalog.forEach(p => {
+                if (Number(p.qty) <= Number(p.minQty)) lowParts++;
+                if (p.isCritical && Number(p.qty) === 0) criticalOut++;
+            });
+        }
+
         return `
             <div style="padding: 2rem;">
                 <h1 style="margin-bottom: 20px;">System Overview</h1>
@@ -263,6 +273,15 @@ const CoreSystem = {
                         <h3 style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;"><span style="font-size: 1.5rem;">🩹</span> First Aid</h3>
                         <p><strong>${firstAidKits}</strong> Configured Areas/Kits</p>
                         <p style="color: var(--text-secondary);">Click to calculate required supplies or generate reorder lists.</p>
+                    </div>
+
+                    <div class="app-card searchable-card" style="cursor: pointer; border-top: 4px solid var(--accent-primary); transition: transform 0.2s;" onclick="CoreSystem.routeToApp('parts')" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform='translateY(0)'">
+                        <h3 style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;"><span style="font-size: 1.5rem;">⚙️</span> Replacement Parts</h3>
+                        <div style="display: flex; flex-direction: column; gap: 5px;">
+                            ${criticalOut > 0 ? `<div style="background: var(--danger-color); color: white; padding: 5px 10px; border-radius: 4px; font-weight: bold; margin-bottom: 5px; text-align: center;">⚠️ ${criticalOut} CRITICAL PART(S) AT ZERO STOCK</div>` : ''}
+                            ${lowParts > 0 ? `<p><strong style="color: #f39c12; font-size: 1.1rem;">${lowParts}</strong> parts at or below reorder minimum.</p>` : ''}
+                            ${(criticalOut === 0 && lowParts === 0) ? `<p style="color: var(--text-secondary);">All shop stock levels are healthy.</p>` : ''}
+                        </div>
                     </div>
 
                 </div>
@@ -298,6 +317,10 @@ const CoreSystem = {
             case 'firstAid': 
                 titleLabel.innerText = "First Aid Tracker"; 
                 if (typeof renderFirstAidApp === 'function') { container.innerHTML = renderFirstAidApp(); if (typeof initFirstAidLogic === 'function') initFirstAidLogic(); } else { container.innerHTML = `<p>Error: First Aid modules not loaded.</p>`; } 
+                break;
+            case 'parts': 
+                titleLabel.innerText = "Replacement Parts"; 
+                if (typeof renderPartsApp === 'function') { container.innerHTML = renderPartsApp(); if (typeof initPartsLogic === 'function') initPartsLogic(); } else { container.innerHTML = `<p>Error: Parts modules not loaded.</p>`; } 
                 break;
             default:
                 console.warn("Unknown route: " + appName);
