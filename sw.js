@@ -1,6 +1,6 @@
 // sw.js
 
-const CACHE_NAME = 'omnihub-v2'; // Bumped version to force cache refresh
+const CACHE_NAME = 'omnihub-v3'; // Bumped version to force the browser to wipe the old cache
 
 // These are all the files the app needs to function completely offline.
 const ASSETS_TO_CACHE = [
@@ -22,9 +22,15 @@ const ASSETS_TO_CACHE = [
     './apps/first-aid/app.js',
     './apps/parts/template.js',
     './apps/parts/app.js',
-    // Cache the external libraries for offline barcode scanning and CSV parsing
+    
+    // Explicitly cache the icons so Android recognizes it as a true app
+    './assets/icon-192.png',
+    './assets/icon-512.png',
+
+    // Cache the external libraries for offline barcode scanning, CSV parsing, and QR label generation
     'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js',
-    'https://unpkg.com/html5-qrcode'
+    'https://unpkg.com/html5-qrcode',
+    'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'
 ];
 
 // Install Event: Caches all the files listed above
