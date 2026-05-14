@@ -244,8 +244,10 @@ function renderPartsApp() {
                     <label style="display:flex; justify-content: space-between; font-size: 0.9rem; font-weight: bold; margin-bottom: 5px;">Camera Zoom: <span id="parts-zoom-val">1.0x</span></label>
                     <input type="range" id="parts-camera-zoom-slider" min="1" max="5" step="0.1" value="1" style="width: 100%; cursor: pointer;">
                 </div>
-                <div id="parts-qr-reader" style="width: 100%; margin: 0 auto 20px auto;"></div>
+                <div id="parts-qr-reader" style="width: 100%; margin: 0 auto 10px auto;"></div>
+                
                 <button id="parts-start-scanner-btn" class="btn-outline" style="width: 100%; margin-bottom: 10px;">📷 Start Camera Scanner</button>
+                <button id="parts-skip-loc-btn" class="btn-outline hidden" style="width: 100%; margin-bottom: 10px;">⏭️ Skip Location Scan</button>
             </div>
         </dialog>
 

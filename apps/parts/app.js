@@ -19,7 +19,6 @@ function initPartsLogic() {
     const mainTabs = document.querySelectorAll('.parts-main-tab');
     mainTabs.forEach(tab => {
         tab.addEventListener('click', (e) => {
-            // Update visual active state of tabs
             mainTabs.forEach(t => { t.classList.remove('btn-primary'); t.classList.add('btn-outline'); });
             e.target.classList.remove('btn-outline'); e.target.classList.add('btn-primary');
             
@@ -446,8 +445,6 @@ function initPartsLogic() {
     document.getElementById('parts-close-audit').onclick = () => auditModal.close();
 
     // --- Printing Labels Logic ---
-    
-    // Print Barcode for the Parts
     document.getElementById('parts-execute-print-btn').onclick = () => {
         if (typeof QRCode === 'undefined') return NotificationSystem.show("QR Library not loaded.", "error");
         
@@ -455,8 +452,6 @@ function initPartsLogic() {
         if (selectedIds.length === 0) return NotificationSystem.show("Select at least one part to print.", "error");
 
         const printContainer = document.getElementById('parts-print-container');
-        
-        // HARD WIPE THE REPORT STAGE TO PREVENT OVERLAP
         document.getElementById('parts-report-print-stage').innerHTML = '';
         printContainer.innerHTML = '';
         
@@ -472,7 +467,6 @@ function initPartsLogic() {
         setTimeout(() => window.print(), 300);
     };
 
-    // Print Barcode for the Locations
     document.getElementById('parts-print-loc-btn').onclick = () => {
         if (typeof QRCode === 'undefined') return NotificationSystem.show("QR Library not loaded.", "error");
         
@@ -496,8 +490,6 @@ function initPartsLogic() {
         if (locationsToPrint.length === 0) return NotificationSystem.show("Selected parts have no assigned locations.", "error");
 
         const printContainer = document.getElementById('parts-print-container');
-        
-        // HARD WIPE THE REPORT STAGE TO PREVENT OVERLAP
         document.getElementById('parts-report-print-stage').innerHTML = '';
         printContainer.innerHTML = '';
         
@@ -540,7 +532,6 @@ function initPartsLogic() {
                 const part = state.partsCatalog.find(p => p.id === txn.partId);
                 const pName = part ? part.name : 'Deleted Part';
                 
-                // Track dynamic cost adjustments
                 if (usageStats[txn.partId]) {
                     const cost = usageStats[txn.partId].cost;
                     
@@ -552,11 +543,9 @@ function initPartsLogic() {
                         usageStats[txn.partId].totalUsedValue += (Math.abs(txn.qtyChange) * cost);
                     } else if (txn.type === 'Audit') {
                         if (txn.qtyChange < 0) {
-                            // Missing parts => Log as used
                             usageStats[txn.partId].used += Math.abs(txn.qtyChange);
                             usageStats[txn.partId].totalUsedValue += (Math.abs(txn.qtyChange) * cost);
                         } else if (txn.qtyChange > 0) {
-                            // Found parts => Offset previously lost parts
                             usageStats[txn.partId].used -= txn.qtyChange; 
                             usageStats[txn.partId].totalUsedValue -= (txn.qtyChange * cost);
                         }
@@ -593,7 +582,6 @@ function initPartsLogic() {
         let grandTotalUsedValue = 0;
 
         for (const id in usageStats) {
-            // Include if they either used parts OR added parts.
             if (usageStats[id].added !== 0 || usageStats[id].used !== 0) {
                 hasSummary = true;
                 grandTotalSpend += usageStats[id].totalSpend;
@@ -624,7 +612,6 @@ function initPartsLogic() {
         document.getElementById('parts-report-print-controls').classList.remove('hidden');
     };
 
-    // Print Logic targeted wrappers
     function executeReportPrint(mode) {
         const start = document.getElementById('parts-report-start').value;
         const end = document.getElementById('parts-report-end').value;
@@ -639,8 +626,6 @@ function initPartsLogic() {
         else content = sumEl.outerHTML + '<br>' + logEl.outerHTML;
 
         const printStage = document.getElementById('parts-report-print-stage');
-        
-        // HARD WIPE THE LABEL STAGE TO PREVENT OVERLAP
         document.getElementById('parts-print-container').innerHTML = '';
         
         printStage.innerHTML = `
@@ -749,6 +734,7 @@ function initPartsLogic() {
         }
         startBtn.style.display = 'block';
         camControls.classList.add('hidden');
+        document.getElementById('parts-skip-loc-btn').classList.add('hidden');
         scanModal.close();
     }
 
@@ -782,24 +768,27 @@ function initPartsLogic() {
         } else {
             DialogSystem.confirm("Part Not Found", "Barcode not recognized. Add as new part?").then(confirmed => {
                 if (confirmed) {
-                    DialogSystem.confirm("Scan Location?", "Would you like to scan a location label for this part now? (Click Cancel to skip)").then(scanLoc => {
-                        if (scanLoc) {
-                            pendingNewPartSku = val;
-                            scannerTarget = 'new_part_location';
-                            document.getElementById('parts-scanner-title').innerText = "Scan Location Label";
-                            scanModal.showModal();
-                            startScannerEngine();
-                        } else {
-                            openEditor(null);
-                            document.getElementById('part-edit-sku').value = val;
-                        }
-                    });
+                    // NEW FLOW: Auto-start location scanner with Skip option
+                    pendingNewPartSku = val;
+                    scannerTarget = 'new_part_location';
+                    document.getElementById('parts-scanner-title').innerText = "Scan Location Label (Optional)";
+                    document.getElementById('parts-skip-loc-btn').classList.remove('hidden');
+                    scanModal.showModal();
+                    startScannerEngine(); // Bypass the "Start Camera" button completely
                 }
             });
         }
     }
 
     document.getElementById('parts-close-scanner').onclick = stopScannerEngine;
+    
+    document.getElementById('parts-skip-loc-btn').onclick = () => {
+        stopScannerEngine();
+        openEditor(null);
+        document.getElementById('part-edit-sku').value = pendingNewPartSku;
+        document.getElementById('part-edit-loc').value = ''; 
+        scannerTarget = 'main';
+    };
 
     manualInput.addEventListener('change', (e) => {
         if(e.target.value) {
@@ -812,6 +801,7 @@ function initPartsLogic() {
         if (typeof Html5Qrcode === 'undefined') return NotificationSystem.show("Scanner library not loaded", "error");
         scannerTarget = 'main';
         document.getElementById('parts-scanner-title').innerText = "Scan Part Barcode";
+        document.getElementById('parts-skip-loc-btn').classList.add('hidden');
         scanModal.showModal();
         manualInput.value = '';
         manualInput.focus();
@@ -821,6 +811,7 @@ function initPartsLogic() {
         if (typeof Html5Qrcode === 'undefined') return NotificationSystem.show("Scanner library not loaded", "error");
         scannerTarget = 'location';
         document.getElementById('parts-scanner-title').innerText = "Scan Location Label";
+        document.getElementById('parts-skip-loc-btn').classList.add('hidden');
         scanModal.showModal();
         manualInput.value = '';
         manualInput.focus();
@@ -853,6 +844,7 @@ function initPartsLogic() {
             NotificationSystem.show("Camera access denied or unavailable.", "error");
             startBtn.style.display = 'block';
             readerDiv.classList.add('hidden');
+            document.getElementById('parts-skip-loc-btn').classList.add('hidden');
         });
     }
 
