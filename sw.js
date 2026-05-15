@@ -1,6 +1,6 @@
 // sw.js
 
-const CACHE_NAME = 'omnihub-v4'; // Bumped to v4 to wipe the old cache
+const CACHE_NAME = 'omnihub-v6'; 
 
 const ASSETS_TO_CACHE = [
     './',
@@ -33,7 +33,7 @@ const ASSETS_TO_CACHE = [
 ];
 
 self.addEventListener('install', (event) => {
-    self.skipWaiting(); // Force the new service worker to activate immediately
+    self.skipWaiting(); 
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
             return cache.addAll(ASSETS_TO_CACHE);
@@ -51,26 +51,27 @@ self.addEventListener('activate', (event) => {
                     }
                 })
             );
+        }).then(() => {
+            // CRITICAL: This forces the Service Worker to take over instantly, 
+            // allowing Chrome to validate the PWA install check immediately.
+            return self.clients.claim(); 
         })
     );
 });
 
-// UPGRADED FETCH HANDLER: Catches navigation failures on GitHub Pages
 self.addEventListener('fetch', (event) => {
     event.respondWith(
-        caches.match(event.request).then((response) => {
-            if (response) {
-                return response; // Return exact cached match
+        caches.match(event.request).then((cachedResponse) => {
+            if (cachedResponse) {
+                return cachedResponse; 
             }
             
-            // If it's a page navigation request that wasn't perfectly matched, 
-            // forcefully serve the cached index.html
-            if (event.request.mode === 'navigate') {
-                return caches.match('./index.html');
-            }
-            
-            // Otherwise attempt network fetch
-            return fetch(event.request);
+            return fetch(event.request).catch(() => {
+                // If the network fails (Chrome's offline test), always fall back to index.html
+                if (event.request.mode === 'navigate') {
+                    return caches.match('./index.html');
+                }
+            });
         })
     );
 });
